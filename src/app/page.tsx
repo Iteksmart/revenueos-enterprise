@@ -50,6 +50,19 @@ const integrations = ["Microsoft 365", "Google", "LinkedIn", "Zoom", "Slack", "T
 export default function RevenueOSEnterprisePage() {
   return (
     <main className="rev-page">
+      <div className="rev-backdrop" aria-hidden="true">
+        <span className="rev-gridline horizontal one" />
+        <span className="rev-gridline horizontal two" />
+        <span className="rev-gridline vertical one" />
+        <span className="rev-gridline vertical two" />
+      </div>
+      <aside className="rev-rail" aria-label="RevenueOS sections">
+        <b>R</b>
+        <span>01 Signal</span>
+        <span>02 Pipeline</span>
+        <span>03 Agents</span>
+        <span>04 Proof</span>
+      </aside>
       <section className="rev-shell" aria-label="RevenueOS Enterprise dashboard">
         <header className="rev-command">
           <div>
@@ -63,6 +76,25 @@ export default function RevenueOSEnterprisePage() {
             <button type="button" className="primary">Launch Campaign</button>
           </div>
         </header>
+
+        <section className="rev-signal-strip" aria-label="Live operating status">
+          <div>
+            <span>Live proof</span>
+            <strong>93,613 receipts</strong>
+          </div>
+          <div>
+            <span>Chain integrity</span>
+            <strong>0 breaks</strong>
+          </div>
+          <div>
+            <span>Agent mode</span>
+            <strong>Human approved</strong>
+          </div>
+          <div>
+            <span>Forecast window</span>
+            <strong>Next 30 days</strong>
+          </div>
+        </section>
 
         <section className="rev-metric-island" aria-label="Revenue metrics">
           {metrics.map((metric) => (
