@@ -1,0 +1,20 @@
+{
+  "name": "RevenueOS Enterprise",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "postCreateCommand": "npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  },
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "RevenueOS Enterprise",
+      "onAutoForward": "openPreview"
+    }
+  }
+}
