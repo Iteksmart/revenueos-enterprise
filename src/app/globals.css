@@ -267,7 +267,7 @@ select {
 
 .rev-metric-island {
   display: grid;
-  grid-template-columns: repeat(12, minmax(84px, 1fr));
+  grid-template-columns: repeat(6, minmax(150px, 1fr));
   gap: 10px;
   margin: 18px 0 12px;
 }
@@ -662,7 +662,7 @@ select {
   }
 
   .rev-metric-island {
-    grid-template-columns: repeat(6, minmax(116px, 1fr));
+    grid-template-columns: repeat(3, minmax(160px, 1fr));
   }
 
   .rev-grid {
