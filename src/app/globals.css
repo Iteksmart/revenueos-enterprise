@@ -40,6 +40,18 @@ select {
   font: inherit;
 }
 
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(135deg, #07090a 0%, #0c1112 34%, #161410 100%);
+  background-size: 72px 72px, 72px 72px, auto;
+}
+
 .rev-page {
   position: relative;
   min-height: 100vh;

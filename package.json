@@ -11,11 +11,12 @@
     "visual:check": "node scripts/visual-check.mjs"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.5.14",
     "jose": "^6.2.3",
     "next": "15.5.20",
     "postgres": "^3.4.9",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "^19.1.4",
+    "react-dom": "^19.1.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {
