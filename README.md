@@ -14,6 +14,9 @@ This repo is the standalone iTechSmart RevenueOS Enterprise preview. It is built
 - Campaign automation and customer portal/integration surface.
 - Codespaces-ready `.devcontainer`.
 - GitHub Actions CI for typecheck and production build.
+- Postgres schema migration for core CRM, campaign, lead scoring, RBAC-ready users/roles, and audit events.
+- Authenticated API routes for CRM companies, contacts, deals, tasks, campaigns, lead scoring, audit events, health, AI meeting prep, and proposal generation.
+- JWKS/OIDC auth boundary compatible with Keycloak/Auth.js-issued tokens.
 
 ## Run locally
 
@@ -30,3 +33,15 @@ Open `http://localhost:3000`.
 npm run typecheck
 npm run build
 ```
+
+## Production services
+
+Copy `.env.example` into the deployment environment and configure real service values. The API fails closed when required production services are missing.
+
+- `DATABASE_URL` for Postgres.
+- `AUTH_JWKS_URL`, `AUTH_ISSUER`, and `AUTH_AUDIENCE` for OIDC/JWT verification.
+- `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` for AI meeting prep and proposal generation.
+
+Apply `migrations/001_revenueos_core.sql` to the production database before enabling the API.
+
+See `docs/COMPLETION-MATRIX.md` for the exact completion status and acceptance gates.

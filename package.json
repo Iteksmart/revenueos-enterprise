@@ -11,9 +11,12 @@
     "visual:check": "node scripts/visual-check.mjs"
   },
   "dependencies": {
+    "jose": "^6.2.3",
     "next": "15.5.20",
+    "postgres": "^3.4.9",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "22.13.14",
