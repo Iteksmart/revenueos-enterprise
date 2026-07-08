@@ -83,7 +83,10 @@ async function tryClerkAuth(permission?: string): Promise<AuthContext | undefine
       permissions.add(dbPermission);
     }
 
-    const organizationId = session.orgId ?? stringClaim(claims.org_id) ?? stringClaim(claims.orgId) ?? membership?.organizationId;
+    const organizationId = membership?.organizationId
+      ?? uuidClaim(claims.org_id)
+      ?? uuidClaim(claims.orgId)
+      ?? uuidClaim(session.orgId);
 
     if (permission && !permissions.has(permission) && !permissions.has("revenueos:admin")) {
       throw new AuthError(`Missing permission: ${permission}`, 403);
@@ -126,6 +129,13 @@ function toStringArray(value: unknown): string[] {
 
 function stringClaim(value: unknown) {
   return typeof value === "string" ? value : undefined;
+}
+
+function uuidClaim(value: unknown) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) ? value : undefined;
 }
 
 async function findRevenueOSMembership(subject: string) {
