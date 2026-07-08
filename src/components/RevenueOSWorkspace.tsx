@@ -150,6 +150,43 @@ type OutboxProcessResult = {
   }>;
 };
 
+type CustomerSuccessSummary = {
+  account_count: number;
+  mrr: string;
+  arr: string;
+  avg_renewal_risk: number;
+  at_risk_count: number;
+  renewals_90_days: number;
+};
+
+type CustomerSuccessAccount = {
+  id: string;
+  company_id: string;
+  company_name: string;
+  industry: string | null;
+  crm_health_score: number;
+  mrr: string;
+  arr: string;
+  health_status: string;
+  onboarding_status: string;
+  renewal_date: string | null;
+  renewal_risk: number;
+  executive_sponsor: string | null;
+  success_plan: string;
+  last_touch_at: string | null;
+  next_review_at: string | null;
+  touchpoint_count: number;
+  open_tickets: number;
+  open_projects: number;
+  open_documents: number;
+  open_renewals: number;
+};
+
+type CustomerSuccessData = {
+  summary: CustomerSuccessSummary;
+  accounts: CustomerSuccessAccount[];
+};
+
 const companySeeds = [
   {
     name: "ABC Medical",
@@ -235,6 +272,7 @@ function WorkspaceShell() {
   const [leadScores, setLeadScores] = useState<LeadScore[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [outboxItems, setOutboxItems] = useState<OutboxItem[]>([]);
+  const [customerSuccess, setCustomerSuccess] = useState<CustomerSuccessData | null>(null);
   const [aiOutput, setAiOutput] = useState("AI outputs will appear here after you run meeting prep or proposal generation.");
   const [status, setStatus] = useState("Checking RevenueOS membership...");
   const [error, setError] = useState<string | null>(null);
@@ -259,6 +297,8 @@ function WorkspaceShell() {
   const openTaskCount = tasks.filter((task) => task.status !== "done").length;
   const queuedOutboxCount = outboxItems.filter((item) => item.status === "queued").length;
   const sentOutboxCount = outboxItems.filter((item) => item.status === "sent").length;
+  const customerSuccessSummary = customerSuccess?.summary;
+  const customerSuccessAccounts = customerSuccess?.accounts ?? [];
 
   useEffect(() => {
     void refreshMembership();
@@ -380,7 +420,11 @@ function WorkspaceShell() {
       if (!campaign.ok) {
         throw new Error(campaign.error ?? "Could not create campaign.");
       }
-      setStatus("Pipeline, tasks, lead scores, campaign, and audit events created.");
+      const successAccounts = await apiPost<{ accountCount: number }>("/api/customer-success", { seed: true });
+      if (!successAccounts.ok) {
+        throw new Error(successAccounts.error ?? "Could not seed customer success accounts.");
+      }
+      setStatus("Pipeline, tasks, lead scores, campaign, customer success accounts, and audit events created.");
       await loadWorkspaceData();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Seed failed.");
@@ -559,6 +603,23 @@ function WorkspaceShell() {
     }
   }
 
+  async function seedCustomerSuccess() {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const result = await apiPost<{ accountCount: number }>("/api/customer-success", { seed: true });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Customer success seed failed.");
+      }
+      setStatus(`Customer Success seeded for ${result.data?.accountCount ?? 0} accounts.`);
+      await Promise.all([loadCustomerSuccess(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Customer success seed failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   async function loadCompanies() {
     const result = await apiGet<Company[]>("/api/crm/companies");
     if (result.ok) {
@@ -610,8 +671,15 @@ function WorkspaceShell() {
     }
   }
 
+  async function loadCustomerSuccess() {
+    const result = await apiGet<CustomerSuccessData>("/api/customer-success");
+    if (result.ok) {
+      setCustomerSuccess(result.data ?? null);
+    }
+  }
+
   async function loadWorkspaceData() {
-    await Promise.all([loadCompanies(), loadCampaigns(), loadDeals(), loadTasks(), loadLeadScores(), loadOutbox(), loadAuditEvents()]);
+    await Promise.all([loadCompanies(), loadCampaigns(), loadDeals(), loadTasks(), loadLeadScores(), loadOutbox(), loadCustomerSuccess(), loadAuditEvents()]);
   }
 
   return (
@@ -636,6 +704,7 @@ function WorkspaceShell() {
         <Metric label="Weighted Pipeline" value={formatCurrency(weightedPipeline)} detail={`${formatCurrency(totalPipeline)} account revenue signal`} />
         <Metric label="Open Tasks" value={openTaskCount.toString()} detail={`${campaigns.length} campaigns / ${leadScores.length} scores`} />
         <Metric label="Outbox" value={queuedOutboxCount.toString()} detail={`${sentOutboxCount} dry-run sent`} />
+        <Metric label="Customer ARR" value={formatCurrency(Number(customerSuccessSummary?.arr ?? 0))} detail={`${customerSuccessSummary?.renewals_90_days ?? 0} renewals in 90 days`} />
       </section>
 
       <section className="workspace-grid">
@@ -737,6 +806,67 @@ function WorkspaceShell() {
                 {outboxItems.length === 0 ? (
                   <tr>
                     <td colSpan={7}>No outbox items yet.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article className="workspace-panel workspace-wide">
+          <div className="rev-panel-head">
+            <div>
+              <p className="rev-kicker">Customer Success</p>
+              <h2>Health, Renewals, and Portal Work</h2>
+            </div>
+            <span className={`rev-pill ${(customerSuccessSummary?.at_risk_count ?? 0) > 0 ? "warning" : "success"}`}>
+              {customerSuccessSummary?.at_risk_count ?? 0} at risk
+            </span>
+          </div>
+          <div className="workspace-cs-summary">
+            <Metric label="Accounts" value={(customerSuccessSummary?.account_count ?? 0).toString()} detail="Customer success records" />
+            <Metric label="MRR" value={formatCurrency(Number(customerSuccessSummary?.mrr ?? 0))} detail="Recurring monthly revenue" />
+            <Metric label="ARR" value={formatCurrency(Number(customerSuccessSummary?.arr ?? 0))} detail="Annual recurring revenue" />
+            <Metric label="Avg Risk" value={`${customerSuccessSummary?.avg_renewal_risk ?? 0}`} detail={`${customerSuccessSummary?.renewals_90_days ?? 0} renewals due soon`} />
+          </div>
+          <div className="workspace-execution-panel workspace-cs-action">
+            <p>Create customer success accounts from the current CRM, including touchpoints, portal tickets, projects, documents, and renewal work.</p>
+            <button type="button" onClick={() => void seedCustomerSuccess()} disabled={isBusy || !ownerReady || companies.length === 0}>
+              Seed Customer Success
+            </button>
+          </div>
+          <div className="rev-table-wrap">
+            <table className="rev-table">
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>Health</th>
+                  <th>ARR</th>
+                  <th>Renewal</th>
+                  <th>Risk</th>
+                  <th>Portal</th>
+                  <th>Last Touch</th>
+                  <th>Next Review</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customerSuccessAccounts.map((account) => (
+                  <tr key={account.id}>
+                    <td>{account.company_name}</td>
+                    <td>{account.health_status} / {account.onboarding_status}</td>
+                    <td>{formatCurrency(Number(account.arr))}</td>
+                    <td>{account.renewal_date ? new Date(account.renewal_date).toLocaleDateString() : "-"}</td>
+                    <td><span className="rev-score">{account.renewal_risk}</span></td>
+                    <td>
+                      {account.open_tickets} tickets / {account.open_projects} projects / {account.open_documents} docs / {account.open_renewals} renewals
+                    </td>
+                    <td>{account.last_touch_at ? new Date(account.last_touch_at).toLocaleDateString() : "-"}</td>
+                    <td>{account.next_review_at ? new Date(account.next_review_at).toLocaleDateString() : "-"}</td>
+                  </tr>
+                ))}
+                {customerSuccessAccounts.length === 0 ? (
+                  <tr>
+                    <td colSpan={8}>No customer success accounts yet.</td>
                   </tr>
                 ) : null}
               </tbody>
