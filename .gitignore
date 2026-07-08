@@ -11,3 +11,5 @@ vercel.json
 .vercel/
 
 .vercel
+
+.env*.local
