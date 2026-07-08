@@ -38,6 +38,34 @@ export async function POST(request: Request) {
       },
     ]);
 
+    const artifact = await sql().begin(async (transaction) => {
+      const quoteNumber = `REV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+      const quoteRows = await transaction`
+        insert into crm_quotes (
+          organization_id, deal_id, quote_number, status, subtotal, tax
+        ) values (
+          ${organizationId}, ${body.dealId}, ${quoteNumber}, 'draft', ${Number(deals[0].amount ?? 0)}, 0
+        )
+        returning id, quote_number, subtotal, tax, total
+      `;
+      const latest = await transaction`
+        select coalesce(max(version), 0)::int + 1 as next_version
+        from proposal_artifacts
+        where organization_id = ${organizationId} and deal_id = ${body.dealId}
+      `;
+      const proposalRows = await transaction`
+        insert into proposal_artifacts (
+          organization_id, deal_id, quote_id, title, status, version, offer, terms, proposal_body, expires_at
+        ) values (
+          ${organizationId}, ${body.dealId}, ${quoteRows[0].id},
+          ${`${deals[0].company_name} - ${deals[0].name} Proposal`},
+          'draft', ${latest[0].next_version}, ${body.offer}, ${body.terms}, ${proposal}, now() + interval '30 days'
+        )
+        returning id, title, status, version, quote_id, expires_at, created_at
+      `;
+      return { proposal: proposalRows[0], quote: quoteRows[0] };
+    });
+
     await writeAuditEvent({
       auth,
       action: "ai.proposal.generate",
@@ -45,8 +73,9 @@ export async function POST(request: Request) {
       resourceId: body.dealId,
       purpose: "proposal-generation",
       outcome: "success",
+      metadata: { proposalId: artifact.proposal.id, quoteId: artifact.quote.id },
     });
-    return jsonOk({ proposal });
+    return jsonOk({ proposal, artifact });
   } catch (error) {
     return jsonError(error);
   }

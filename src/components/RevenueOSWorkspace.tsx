@@ -187,6 +187,25 @@ type CustomerSuccessData = {
   accounts: CustomerSuccessAccount[];
 };
 
+type ProposalArtifact = {
+  id: string;
+  deal_id: string;
+  quote_id: string | null;
+  title: string;
+  status: string;
+  version: number;
+  proposal_body: string;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  deal_name: string;
+  company_name: string;
+  quote_number: string | null;
+  subtotal: string | null;
+  tax: string | null;
+  total: string | null;
+};
+
 const companySeeds = [
   {
     name: "ABC Medical",
@@ -273,6 +292,7 @@ function WorkspaceShell() {
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [outboxItems, setOutboxItems] = useState<OutboxItem[]>([]);
   const [customerSuccess, setCustomerSuccess] = useState<CustomerSuccessData | null>(null);
+  const [proposals, setProposals] = useState<ProposalArtifact[]>([]);
   const [aiOutput, setAiOutput] = useState("AI outputs will appear here after you run meeting prep or proposal generation.");
   const [status, setStatus] = useState("Checking RevenueOS membership...");
   const [error, setError] = useState<string | null>(null);
@@ -299,6 +319,9 @@ function WorkspaceShell() {
   const sentOutboxCount = outboxItems.filter((item) => item.status === "sent").length;
   const customerSuccessSummary = customerSuccess?.summary;
   const customerSuccessAccounts = customerSuccess?.accounts ?? [];
+  const openProposalValue = proposals
+    .filter((proposal) => !["accepted", "expired", "withdrawn"].includes(proposal.status))
+    .reduce((sum, proposal) => sum + Number(proposal.total ?? 0), 0);
 
   useEffect(() => {
     void refreshMembership();
@@ -550,8 +573,8 @@ function WorkspaceShell() {
         throw new Error(result.error ?? "Proposal generation failed.");
       }
       setAiOutput(result.data?.proposal ?? "No proposal returned.");
-      setStatus("AI proposal generated.");
-      await loadAuditEvents();
+      setStatus("AI proposal generated and stored as a proposal artifact.");
+      await Promise.all([loadProposals(), loadAuditEvents()]);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Proposal generation failed.";
       setAiOutput(message);
@@ -620,6 +643,23 @@ function WorkspaceShell() {
     }
   }
 
+  async function updateProposalStatus(proposal: ProposalArtifact, status: "sent" | "viewed" | "accepted") {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const result = await apiPatch<ProposalArtifact>("/api/proposals", { id: proposal.id, status });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Could not update proposal.");
+      }
+      setStatus(`${proposal.title} marked ${status}.`);
+      await Promise.all([loadProposals(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update proposal.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   async function loadCompanies() {
     const result = await apiGet<Company[]>("/api/crm/companies");
     if (result.ok) {
@@ -678,8 +718,25 @@ function WorkspaceShell() {
     }
   }
 
+  async function loadProposals() {
+    const result = await apiGet<ProposalArtifact[]>("/api/proposals");
+    if (result.ok) {
+      setProposals(result.data ?? []);
+    }
+  }
+
   async function loadWorkspaceData() {
-    await Promise.all([loadCompanies(), loadCampaigns(), loadDeals(), loadTasks(), loadLeadScores(), loadOutbox(), loadCustomerSuccess(), loadAuditEvents()]);
+    await Promise.all([
+      loadCompanies(),
+      loadCampaigns(),
+      loadDeals(),
+      loadTasks(),
+      loadLeadScores(),
+      loadOutbox(),
+      loadCustomerSuccess(),
+      loadProposals(),
+      loadAuditEvents(),
+    ]);
   }
 
   return (
@@ -705,6 +762,7 @@ function WorkspaceShell() {
         <Metric label="Open Tasks" value={openTaskCount.toString()} detail={`${campaigns.length} campaigns / ${leadScores.length} scores`} />
         <Metric label="Outbox" value={queuedOutboxCount.toString()} detail={`${sentOutboxCount} dry-run sent`} />
         <Metric label="Customer ARR" value={formatCurrency(Number(customerSuccessSummary?.arr ?? 0))} detail={`${customerSuccessSummary?.renewals_90_days ?? 0} renewals in 90 days`} />
+        <Metric label="Proposals" value={formatCurrency(openProposalValue)} detail={`${proposals.length} stored proposal artifacts`} />
       </section>
 
       <section className="workspace-grid">
@@ -1021,6 +1079,63 @@ function WorkspaceShell() {
             </button>
           </div>
           <pre className="workspace-ai-output">{aiOutput}</pre>
+        </article>
+
+        <article className="workspace-panel workspace-wide">
+          <div className="rev-panel-head">
+            <div>
+              <p className="rev-kicker">Proposal Builder</p>
+              <h2>Stored Proposal Artifacts and Quotes</h2>
+            </div>
+            <span className="rev-pill success">{proposals.length} artifacts</span>
+          </div>
+          <div className="rev-table-wrap">
+            <table className="rev-table">
+              <thead>
+                <tr>
+                  <th>Proposal</th>
+                  <th>Company</th>
+                  <th>Quote</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                  <th>Expires</th>
+                  <th>Version</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proposals.map((proposal) => (
+                  <tr key={proposal.id}>
+                    <td>{proposal.title}</td>
+                    <td>{proposal.company_name}</td>
+                    <td>{proposal.quote_number ?? "-"}</td>
+                    <td>{formatCurrency(Number(proposal.total ?? 0))}</td>
+                    <td><span className="rev-score">{proposal.status}</span></td>
+                    <td>{proposal.expires_at ? new Date(proposal.expires_at).toLocaleDateString() : "-"}</td>
+                    <td>v{proposal.version}</td>
+                    <td>
+                      <div className="workspace-table-actions">
+                        <button type="button" onClick={() => void updateProposalStatus(proposal, "sent")} disabled={isBusy || proposal.status === "sent"}>
+                          Sent
+                        </button>
+                        <button type="button" onClick={() => void updateProposalStatus(proposal, "viewed")} disabled={isBusy || proposal.status === "viewed"}>
+                          Viewed
+                        </button>
+                        <button type="button" onClick={() => void updateProposalStatus(proposal, "accepted")} disabled={isBusy || proposal.status === "accepted"}>
+                          Accepted
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {proposals.length === 0 ? (
+                  <tr>
+                    <td colSpan={8}>No proposal artifacts yet. Run Generate Proposal from the AI Workbench.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
         </article>
 
         <article className="workspace-panel workspace-wide">

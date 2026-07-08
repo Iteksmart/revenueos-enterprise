@@ -1013,7 +1013,7 @@ select {
 
 .workspace-metrics {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
   margin: 18px 0 12px;
 }
@@ -1180,7 +1180,8 @@ select {
 }
 
 .workspace-row button,
-.workspace-ai-actions button {
+.workspace-ai-actions button,
+.workspace-table-actions button {
   flex: 0 0 auto;
   min-height: 36px;
   border: 1px solid var(--line-strong);
@@ -1195,9 +1196,22 @@ select {
 }
 
 .workspace-row button:disabled,
-.workspace-ai-actions button:disabled {
+.workspace-ai-actions button:disabled,
+.workspace-table-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
+}
+
+.workspace-table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 214px;
+}
+
+.workspace-table-actions button {
+  min-height: 30px;
+  padding: 0 8px;
 }
 
 .workspace-ai-actions {
