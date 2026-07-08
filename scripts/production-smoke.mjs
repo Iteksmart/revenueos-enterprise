@@ -34,6 +34,12 @@ const checks = [
     path: "/api/automations",
     expectStatus: 401,
   },
+  {
+    name: "integrations fails closed",
+    method: "GET",
+    path: "/api/integrations",
+    expectStatus: 401,
+  },
 ];
 
 if (workerToken) {

@@ -237,6 +237,35 @@ type AutomationData = {
   runs: AutomationRun[];
 };
 
+type IntegrationConnection = {
+  id: string;
+  provider: string;
+  category: string;
+  status: string;
+  auth_type: string;
+  scopes: string[];
+  health_status: string;
+  last_checked_at: string | null;
+  last_error: string | null;
+  event_count: number;
+  updated_at: string;
+};
+
+type IntegrationEvent = {
+  id: string;
+  connection_id: string;
+  provider: string;
+  event_type: string;
+  outcome: string;
+  summary: string;
+  created_at: string;
+};
+
+type IntegrationData = {
+  connections: IntegrationConnection[];
+  events: IntegrationEvent[];
+};
+
 const companySeeds = [
   {
     name: "ABC Medical",
@@ -325,6 +354,7 @@ function WorkspaceShell() {
   const [customerSuccess, setCustomerSuccess] = useState<CustomerSuccessData | null>(null);
   const [proposals, setProposals] = useState<ProposalArtifact[]>([]);
   const [automations, setAutomations] = useState<AutomationData | null>(null);
+  const [integrations, setIntegrations] = useState<IntegrationData | null>(null);
   const [aiOutput, setAiOutput] = useState("AI outputs will appear here after you run meeting prep or proposal generation.");
   const [status, setStatus] = useState("Checking RevenueOS membership...");
   const [error, setError] = useState<string | null>(null);
@@ -356,6 +386,9 @@ function WorkspaceShell() {
     .reduce((sum, proposal) => sum + Number(proposal.total ?? 0), 0);
   const automationRules = automations?.rules ?? [];
   const automationRuns = automations?.runs ?? [];
+  const integrationConnections = integrations?.connections ?? [];
+  const integrationEvents = integrations?.events ?? [];
+  const readyIntegrationCount = integrationConnections.filter((connection) => connection.status === "connected" && connection.health_status === "healthy").length;
 
   useEffect(() => {
     void refreshMembership();
@@ -485,7 +518,11 @@ function WorkspaceShell() {
       if (!automationSeed.ok) {
         throw new Error(automationSeed.error ?? "Could not seed automations.");
       }
-      setStatus("Pipeline, tasks, lead scores, campaign, customer success accounts, automations, and audit events created.");
+      const integrationSeed = await apiPost<{ providerCount: number }>("/api/integrations", { seed: true });
+      if (!integrationSeed.ok) {
+        throw new Error(integrationSeed.error ?? "Could not seed integrations.");
+      }
+      setStatus("Pipeline, tasks, lead scores, campaign, customer success accounts, automations, integrations, and audit events created.");
       await loadWorkspaceData();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Seed failed.");
@@ -741,6 +778,46 @@ function WorkspaceShell() {
     }
   }
 
+  async function seedIntegrations() {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const result = await apiPost<{ providerCount: number }>("/api/integrations", { seed: true });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Integration seed failed.");
+      }
+      setStatus(`Integration catalog seeded with ${result.data?.providerCount ?? 0} providers.`);
+      await Promise.all([loadIntegrations(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Integration seed failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function markIntegration(connection: IntegrationConnection, status: "configured" | "connected" | "error") {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const healthStatus = status === "connected" ? "healthy" : status === "error" ? "failed" : "unknown";
+      const result = await apiPost<IntegrationConnection>("/api/integrations", {
+        provider: connection.provider,
+        status,
+        healthStatus,
+        lastError: status === "error" ? "Provider app, OAuth consent, or webhook validation still required." : null,
+      });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Integration update failed.");
+      }
+      setStatus(`${connection.provider} marked ${status}.`);
+      await Promise.all([loadIntegrations(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Integration update failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   async function loadCompanies() {
     const result = await apiGet<Company[]>("/api/crm/companies");
     if (result.ok) {
@@ -813,6 +890,13 @@ function WorkspaceShell() {
     }
   }
 
+  async function loadIntegrations() {
+    const result = await apiGet<IntegrationData>("/api/integrations");
+    if (result.ok) {
+      setIntegrations(result.data ?? null);
+    }
+  }
+
   async function loadWorkspaceData() {
     await Promise.all([
       loadCompanies(),
@@ -824,6 +908,7 @@ function WorkspaceShell() {
       loadCustomerSuccess(),
       loadProposals(),
       loadAutomations(),
+      loadIntegrations(),
       loadAuditEvents(),
     ]);
   }
@@ -853,6 +938,7 @@ function WorkspaceShell() {
         <Metric label="Customer ARR" value={formatCurrency(Number(customerSuccessSummary?.arr ?? 0))} detail={`${customerSuccessSummary?.renewals_90_days ?? 0} renewals in 90 days`} />
         <Metric label="Proposals" value={formatCurrency(openProposalValue)} detail={`${proposals.length} stored proposal artifacts`} />
         <Metric label="Automations" value={automationRules.length.toString()} detail={`${automationRuns.length} recent execution runs`} />
+        <Metric label="Integrations" value={`${readyIntegrationCount}/${integrationConnections.length}`} detail={`${integrationEvents.length} recent provider events`} />
       </section>
 
       <section className="workspace-grid">
@@ -1270,6 +1356,69 @@ function WorkspaceShell() {
               ))}
               {automationRuns.length === 0 ? <p>No automation runs yet.</p> : null}
             </div>
+          </div>
+        </article>
+
+        <article className="workspace-panel workspace-wide">
+          <div className="rev-panel-head">
+            <div>
+              <p className="rev-kicker">Integration Control Plane</p>
+              <h2>Provider Readiness and OAuth Scope Ledger</h2>
+            </div>
+            <span className="rev-pill">{readyIntegrationCount} healthy</span>
+          </div>
+          <div className="workspace-execution-panel workspace-cs-action">
+            <p>Seed the provider catalog, then track readiness for each external system. This records status and scope posture without exposing provider secrets to the browser.</p>
+            <button type="button" onClick={() => void seedIntegrations()} disabled={isBusy || !ownerReady}>
+              Seed Integrations
+            </button>
+          </div>
+          <div className="rev-table-wrap">
+            <table className="rev-table">
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>Category</th>
+                  <th>Auth</th>
+                  <th>Status</th>
+                  <th>Health</th>
+                  <th>Scopes</th>
+                  <th>Last Check</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {integrationConnections.map((connection) => (
+                  <tr key={connection.id}>
+                    <td>{connection.provider}</td>
+                    <td>{connection.category}</td>
+                    <td>{connection.auth_type}</td>
+                    <td><span className="rev-score">{connection.status}</span></td>
+                    <td>{connection.health_status}</td>
+                    <td>{connection.scopes.slice(0, 3).join(", ")}{connection.scopes.length > 3 ? "..." : ""}</td>
+                    <td>{connection.last_checked_at ? new Date(connection.last_checked_at).toLocaleString() : "-"}</td>
+                    <td>
+                      <div className="workspace-table-actions">
+                        <button type="button" onClick={() => void markIntegration(connection, "configured")} disabled={isBusy}>
+                          Configured
+                        </button>
+                        <button type="button" onClick={() => void markIntegration(connection, "connected")} disabled={isBusy}>
+                          Healthy
+                        </button>
+                        <button type="button" onClick={() => void markIntegration(connection, "error")} disabled={isBusy}>
+                          Blocked
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {integrationConnections.length === 0 ? (
+                  <tr>
+                    <td colSpan={8}>No integration connections yet.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
         </article>
 
