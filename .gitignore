@@ -7,9 +7,10 @@ dist/
 *.log
 *.tsbuildinfo
 artifacts/
-vercel.json
 .vercel/
 
 .vercel
 
 .env*.local
+
+!vercel.json

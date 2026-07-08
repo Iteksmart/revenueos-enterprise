@@ -11,6 +11,7 @@ const serverEnvSchema = z.object({
   OPENAI_BASE_URL: z.string().url().optional(),
   OPENAI_MODEL: z.string().optional(),
   REVENUEOS_WORKER_TOKEN: z.string().optional(),
+  CRON_SECRET: z.string().optional(),
 });
 
 export const serverEnv = serverEnvSchema.parse(process.env);
