@@ -19,6 +19,7 @@ This repo is the standalone iTechSmart RevenueOS Enterprise preview. It is built
 - Postgres schema migration for core CRM, campaign, lead scoring, RBAC-ready users/roles, and audit events.
 - Authenticated API routes for CRM companies, contacts, deals, tasks, campaigns, lead scoring, audit events, health, AI meeting prep, and proposal generation.
 - Clerk SSO integration for app sessions, plus JWKS/OIDC bearer-token fallback for machine/API clients.
+- Customer Success accounts, renewal risk, portal work items, touchpoints, proposal artifacts, quotes, and automation rules/runs.
 
 ## Run locally
 
@@ -44,7 +45,8 @@ Copy `.env.example` into the deployment environment and configure real service v
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` for Clerk SSO.
 - `AUTH_JWKS_URL`, `AUTH_ISSUER`, and `AUTH_AUDIENCE` for OIDC/JWT verification.
 - `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` for AI meeting prep and proposal generation.
+- `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and `OUTBOUND_SEND_ENABLED` for guarded email delivery.
 
-Apply `migrations/001_revenueos_core.sql` to the production database before enabling the API.
+Apply migrations in numeric order before enabling the API.
 
 See `docs/COMPLETION-MATRIX.md` for the exact completion status and acceptance gates.

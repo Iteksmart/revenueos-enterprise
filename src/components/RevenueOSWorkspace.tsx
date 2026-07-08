@@ -206,6 +206,37 @@ type ProposalArtifact = {
   total: string | null;
 };
 
+type AutomationRule = {
+  id: string;
+  name: string;
+  status: string;
+  trigger_event: string;
+  condition_field: string;
+  condition_operator: string;
+  condition_value: string;
+  action_type: string;
+  action_config: Record<string, unknown>;
+  run_count: number;
+  recent_run_count: number;
+  last_run_at: string | null;
+  created_at: string;
+};
+
+type AutomationRun = {
+  id: string;
+  rule_id: string;
+  event_type: string;
+  outcome: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  created_at: string;
+};
+
+type AutomationData = {
+  rules: AutomationRule[];
+  runs: AutomationRun[];
+};
+
 const companySeeds = [
   {
     name: "ABC Medical",
@@ -293,6 +324,7 @@ function WorkspaceShell() {
   const [outboxItems, setOutboxItems] = useState<OutboxItem[]>([]);
   const [customerSuccess, setCustomerSuccess] = useState<CustomerSuccessData | null>(null);
   const [proposals, setProposals] = useState<ProposalArtifact[]>([]);
+  const [automations, setAutomations] = useState<AutomationData | null>(null);
   const [aiOutput, setAiOutput] = useState("AI outputs will appear here after you run meeting prep or proposal generation.");
   const [status, setStatus] = useState("Checking RevenueOS membership...");
   const [error, setError] = useState<string | null>(null);
@@ -322,6 +354,8 @@ function WorkspaceShell() {
   const openProposalValue = proposals
     .filter((proposal) => !["accepted", "expired", "withdrawn"].includes(proposal.status))
     .reduce((sum, proposal) => sum + Number(proposal.total ?? 0), 0);
+  const automationRules = automations?.rules ?? [];
+  const automationRuns = automations?.runs ?? [];
 
   useEffect(() => {
     void refreshMembership();
@@ -447,7 +481,11 @@ function WorkspaceShell() {
       if (!successAccounts.ok) {
         throw new Error(successAccounts.error ?? "Could not seed customer success accounts.");
       }
-      setStatus("Pipeline, tasks, lead scores, campaign, customer success accounts, and audit events created.");
+      const automationSeed = await apiPost<{ ruleCount: number }>("/api/automations", { seed: true });
+      if (!automationSeed.ok) {
+        throw new Error(automationSeed.error ?? "Could not seed automations.");
+      }
+      setStatus("Pipeline, tasks, lead scores, campaign, customer success accounts, automations, and audit events created.");
       await loadWorkspaceData();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Seed failed.");
@@ -660,6 +698,49 @@ function WorkspaceShell() {
     }
   }
 
+  async function seedAutomations() {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const result = await apiPost<{ ruleCount: number }>("/api/automations", { seed: true });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Automation seed failed.");
+      }
+      setStatus(`Automation engine seeded with ${result.data?.ruleCount ?? 0} rules.`);
+      await Promise.all([loadAutomations(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Automation seed failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function runSampleAutomation() {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const company = companies[0];
+      const deal = deals[0];
+      const campaign = campaigns[0];
+      const result = await apiPost<{ matched: number; executed: Array<{ outcome: string }> }>("/api/automations", {
+        eventType: "email_clicked",
+        companyId: company?.id ?? null,
+        dealId: deal?.id ?? null,
+        campaignId: campaign?.id ?? null,
+        recipient: user?.primaryEmailAddress?.emailAddress ?? "kevin@itechsmart.dev",
+      });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Automation run failed.");
+      }
+      setStatus(`Automation event executed: ${result.data?.matched ?? 0} matching rules.`);
+      await Promise.all([loadAutomations(), loadTasks(), loadOutbox(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Automation run failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   async function loadCompanies() {
     const result = await apiGet<Company[]>("/api/crm/companies");
     if (result.ok) {
@@ -725,6 +806,13 @@ function WorkspaceShell() {
     }
   }
 
+  async function loadAutomations() {
+    const result = await apiGet<AutomationData>("/api/automations");
+    if (result.ok) {
+      setAutomations(result.data ?? null);
+    }
+  }
+
   async function loadWorkspaceData() {
     await Promise.all([
       loadCompanies(),
@@ -735,6 +823,7 @@ function WorkspaceShell() {
       loadOutbox(),
       loadCustomerSuccess(),
       loadProposals(),
+      loadAutomations(),
       loadAuditEvents(),
     ]);
   }
@@ -763,6 +852,7 @@ function WorkspaceShell() {
         <Metric label="Outbox" value={queuedOutboxCount.toString()} detail={`${sentOutboxCount} dry-run sent`} />
         <Metric label="Customer ARR" value={formatCurrency(Number(customerSuccessSummary?.arr ?? 0))} detail={`${customerSuccessSummary?.renewals_90_days ?? 0} renewals in 90 days`} />
         <Metric label="Proposals" value={formatCurrency(openProposalValue)} detail={`${proposals.length} stored proposal artifacts`} />
+        <Metric label="Automations" value={automationRules.length.toString()} detail={`${automationRuns.length} recent execution runs`} />
       </section>
 
       <section className="workspace-grid">
@@ -1135,6 +1225,51 @@ function WorkspaceShell() {
                 ) : null}
               </tbody>
             </table>
+          </div>
+        </article>
+
+        <article className="workspace-panel workspace-wide">
+          <div className="rev-panel-head">
+            <div>
+              <p className="rev-kicker">Automation Engine</p>
+              <h2>IF/THEN Rules and Execution Runs</h2>
+            </div>
+            <span className="rev-pill success">{automationRules.length} rules</span>
+          </div>
+          <div className="workspace-execution-panel workspace-cs-action">
+            <p>Seed the default RevenueOS rules, then run a sample clicked-email event. Matching rules create real CRM tasks or queued outbox items.</p>
+            <button type="button" onClick={() => void seedAutomations()} disabled={isBusy || !ownerReady}>
+              Seed Automations
+            </button>
+            <button type="button" onClick={() => void runSampleAutomation()} disabled={isBusy || !ownerReady || automationRules.length === 0}>
+              Run Click Event
+            </button>
+          </div>
+          <div className="workspace-campaign-grid">
+            <div className="workspace-stack">
+              {automationRules.map((rule) => (
+                <div className="workspace-row" key={rule.id}>
+                  <div>
+                    <b>{rule.name}</b>
+                    <span>IF {rule.condition_field} {rule.condition_operator} {rule.condition_value} THEN {rule.action_type}</span>
+                  </div>
+                  <em>{rule.run_count} total / {rule.recent_run_count} recent</em>
+                </div>
+              ))}
+              {automationRules.length === 0 ? <p>No automation rules yet.</p> : null}
+            </div>
+            <div className="workspace-stack">
+              {automationRuns.slice(0, 6).map((run) => (
+                <div className="workspace-row" key={run.id}>
+                  <div>
+                    <b>{run.event_type}</b>
+                    <span>{run.resource_type ?? "automation"} / {run.outcome}</span>
+                  </div>
+                  <em>{new Date(run.created_at).toLocaleString()}</em>
+                </div>
+              ))}
+              {automationRuns.length === 0 ? <p>No automation runs yet.</p> : null}
+            </div>
           </div>
         </article>
 
