@@ -20,15 +20,16 @@ export type AuthContext = {
 };
 
 export async function requireAuth(request: Request, permission?: string): Promise<AuthContext> {
-  const clerkContext = await tryClerkAuth(permission);
-  if (clerkContext) {
-    return clerkContext;
-  }
-
   const header = request.headers.get("authorization");
   const token = header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : undefined;
+
   if (!token) {
-    throw new AuthError("Bearer token is required", 401);
+    const clerkContext = await tryClerkAuth(permission);
+    if (clerkContext) {
+      return clerkContext;
+    }
+
+    throw new AuthError("Clerk session or bearer token is required", 401);
   }
 
   const jwks = createRemoteJWKSet(new URL(requireEnv("AUTH_JWKS_URL")));
