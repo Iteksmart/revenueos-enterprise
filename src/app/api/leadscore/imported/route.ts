@@ -23,6 +23,11 @@ export async function POST(request: Request) {
       left join integration_external_records er on er.crm_company_id = c.id or er.crm_contact_id = ct.id
       where c.organization_id = ${organizationId}
         and (c.lifecycle_stage = 'imported' or er.id is not null)
+        and not exists (
+          select 1 from lead_scores existing
+          where existing.organization_id = c.organization_id
+            and existing.company_id = c.id
+        )
       group by c.id
       order by c.updated_at desc
       limit 100
