@@ -2,6 +2,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { auth as clerkAuth } from "@clerk/nextjs/server";
 import { z } from "zod";
 import { requireEnv, serverEnv } from "./config";
+import { sql } from "./db";
 
 const claimsSchema = z.object({
   sub: z.string(),
@@ -17,6 +18,7 @@ export type AuthContext = {
   name?: string;
   organizationId?: string;
   permissions: Set<string>;
+  revenueOSUserId?: string;
 };
 
 export async function requireAuth(request: Request, permission?: string): Promise<AuthContext> {
@@ -76,6 +78,13 @@ async function tryClerkAuth(permission?: string): Promise<AuthContext | undefine
       permissions.add(`clerk:${claims.org_role}`);
     }
 
+    const membership = await findRevenueOSMembership(session.userId);
+    for (const dbPermission of membership?.permissions ?? []) {
+      permissions.add(dbPermission);
+    }
+
+    const organizationId = session.orgId ?? stringClaim(claims.org_id) ?? stringClaim(claims.orgId) ?? membership?.organizationId;
+
     if (permission && !permissions.has(permission) && !permissions.has("revenueos:admin")) {
       throw new AuthError(`Missing permission: ${permission}`, 403);
     }
@@ -84,8 +93,9 @@ async function tryClerkAuth(permission?: string): Promise<AuthContext | undefine
       subject: session.userId,
       email: typeof claims.email === "string" ? claims.email : undefined,
       name: typeof claims.name === "string" ? claims.name : undefined,
-      organizationId: session.orgId ?? stringClaim(claims.org_id) ?? stringClaim(claims.orgId),
+      organizationId,
       permissions,
+      revenueOSUserId: membership?.userId,
     };
   } catch (error) {
     if (error instanceof AuthError) {
@@ -116,6 +126,36 @@ function toStringArray(value: unknown): string[] {
 
 function stringClaim(value: unknown) {
   return typeof value === "string" ? value : undefined;
+}
+
+async function findRevenueOSMembership(subject: string) {
+  const rows = await sql()`
+    select
+      u.id as user_id,
+      u.organization_id,
+      coalesce(array_agg(distinct permission) filter (where permission is not null), '{}') as permissions
+    from revenueos_users u
+    left join revenueos_user_roles ur on ur.user_id = u.id
+    left join revenueos_roles r on r.id = ur.role_id
+    left join lateral unnest(r.permissions) as permission on true
+    where u.external_subject = ${subject}
+    group by u.id, u.organization_id
+    order by u.created_at asc
+    limit 1
+  `;
+
+  const row = rows[0];
+  if (!row) {
+    return undefined;
+  }
+
+  return {
+    userId: String(row.user_id),
+    organizationId: String(row.organization_id),
+    permissions: Array.isArray(row.permissions)
+      ? row.permissions.filter((permission): permission is string => typeof permission === "string")
+      : [],
+  };
 }
 
 export class AuthError extends Error {
