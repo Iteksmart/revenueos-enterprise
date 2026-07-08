@@ -295,6 +295,10 @@ type ImportedLeadScoreResult = {
   scoredCount: number;
 };
 
+type ImportedSalesPlayResult = {
+  createdCount: number;
+};
+
 type SecurityUser = {
   id: string;
   external_subject: string;
@@ -920,6 +924,23 @@ function WorkspaceShell() {
       await Promise.all([loadLeadScores(), loadAuditEvents()]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Imported lead scoring failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function createImportedSalesPlays() {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const result = await apiPost<ImportedSalesPlayResult>("/api/sales-plays/imported", {});
+      if (!result.ok) {
+        throw new Error(result.error ?? "Imported sales play creation failed.");
+      }
+      setStatus(`Created ${result.data?.createdCount ?? 0} sales plays from imported companies.`);
+      await Promise.all([loadDeals(), loadTasks(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Imported sales play creation failed.");
     } finally {
       setIsBusy(false);
     }
@@ -1723,6 +1744,9 @@ function WorkspaceShell() {
             <p>Turn imported source records into fit, authority, budget, and urgency scores for prioritization.</p>
             <button type="button" onClick={() => void scoreImportedCompanies()} disabled={isBusy || !ownerReady || companies.length === 0}>
               Score Imported Companies
+            </button>
+            <button type="button" onClick={() => void createImportedSalesPlays()} disabled={isBusy || !ownerReady || leadScores.length === 0}>
+              Create Sales Plays
             </button>
           </div>
           <div className="rev-table-wrap">

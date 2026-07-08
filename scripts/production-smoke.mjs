@@ -49,6 +49,14 @@ const checks = [
     body: JSON.stringify({}),
   },
   {
+    name: "imported sales plays fails closed",
+    method: "POST",
+    path: "/api/sales-plays/imported",
+    expectStatus: 401,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({}),
+  },
+  {
     name: "integration cron fails closed",
     method: "GET",
     path: "/api/cron/integrations/sync",
