@@ -12,7 +12,10 @@ const serverEnvSchema = z.object({
   OPENAI_MODEL: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().optional(),
-  OUTBOUND_SEND_ENABLED: z.enum(["true", "false"]).optional(),
+  OUTBOUND_SEND_ENABLED: z.preprocess(
+    (value) => typeof value === "string" ? value.trim().toLowerCase() : value,
+    z.enum(["true", "false"]).optional(),
+  ),
   REVENUEOS_WORKER_TOKEN: z.string().optional(),
   CRON_SECRET: z.string().optional(),
 });
