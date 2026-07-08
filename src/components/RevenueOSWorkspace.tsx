@@ -34,6 +34,18 @@ type Company = {
   updated_at: string;
 };
 
+type Contact = {
+  id: string;
+  company_id: string | null;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  phone: string | null;
+  title: string | null;
+  authority_level: number;
+  updated_at: string;
+};
+
 type Campaign = {
   id: string;
   name: string;
@@ -383,6 +395,7 @@ function WorkspaceShell() {
   const { user } = useUser();
   const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -880,6 +893,7 @@ function WorkspaceShell() {
         `${connection.provider} synced ${data?.importedContacts ?? 0} contacts and ${data?.importedCompanies ?? 0} companies.`,
       );
       await Promise.all([loadIntegrations(), loadCompanies(), loadAuditEvents()]);
+      await loadContacts();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Integration sync failed.");
     } finally {
@@ -930,6 +944,15 @@ function WorkspaceShell() {
       setCompanies(result.data ?? []);
     } else {
       setError(result.error ?? "Could not load companies.");
+    }
+  }
+
+  async function loadContacts() {
+    const result = await apiGet<Contact[]>("/api/crm/contacts");
+    if (result.ok) {
+      setContacts(result.data ?? []);
+    } else {
+      setError(result.error ?? "Could not load contacts.");
     }
   }
 
@@ -1013,6 +1036,7 @@ function WorkspaceShell() {
   async function loadWorkspaceData() {
     await Promise.all([
       loadCompanies(),
+      loadContacts(),
       loadCampaigns(),
       loadDeals(),
       loadTasks(),
@@ -1045,7 +1069,7 @@ function WorkspaceShell() {
 
       <section className="workspace-metrics" aria-label="Live workspace metrics">
         <Metric label="Organization" value={organizationName} detail={organizationId ? organizationId.slice(0, 8) : "Setup required"} />
-        <Metric label="Companies" value={companies.length.toString()} detail="Database-backed CRM" />
+        <Metric label="Companies" value={companies.length.toString()} detail={`${contacts.length} imported contacts`} />
         <Metric label="Weighted Pipeline" value={formatCurrency(weightedPipeline)} detail={`${formatCurrency(totalPipeline)} account revenue signal`} />
         <Metric label="Open Tasks" value={openTaskCount.toString()} detail={`${campaigns.length} campaigns / ${leadScores.length} scores`} />
         <Metric label="Outbox" value={queuedOutboxCount.toString()} detail={`${sentOutboxCount} dry-run sent`} />
@@ -1296,6 +1320,47 @@ function WorkspaceShell() {
                 {companies.length === 0 ? (
                   <tr>
                     <td colSpan={7}>No CRM companies yet.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article className="workspace-panel workspace-wide">
+          <div className="rev-panel-head">
+            <div>
+              <p className="rev-kicker">Contacts</p>
+              <h2>Imported Relationship Records</h2>
+            </div>
+            <span className="rev-pill success">{contacts.length} rows</span>
+          </div>
+          <div className="rev-table-wrap">
+            <table className="rev-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Title</th>
+                  <th>Authority</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contacts.slice(0, 50).map((contact) => (
+                  <tr key={contact.id}>
+                    <td>{contact.first_name} {contact.last_name}</td>
+                    <td>{contact.email ?? "-"}</td>
+                    <td>{contact.phone ?? "-"}</td>
+                    <td>{contact.title ?? "-"}</td>
+                    <td><span className="rev-score">{contact.authority_level}</span></td>
+                    <td>{new Date(contact.updated_at).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+                {contacts.length === 0 ? (
+                  <tr>
+                    <td colSpan={6}>No contacts imported yet. Run Sync from Apollo or GoHighLevel.</td>
                   </tr>
                 ) : null}
               </tbody>

@@ -41,6 +41,12 @@ const checks = [
     expectStatus: 401,
   },
   {
+    name: "integration cron fails closed",
+    method: "GET",
+    path: "/api/cron/integrations/sync",
+    expectStatus: 401,
+  },
+  {
     name: "admin security fails closed",
     method: "GET",
     path: "/api/admin/security",
@@ -78,6 +84,15 @@ if (workerToken) {
       expectStatus: 200,
       headers: { authorization: `Bearer ${workerToken}` },
       validate: (json) => json?.ok === true && json?.data?.ready === true,
+    },
+    {
+      name: "integration worker sync",
+      method: "POST",
+      path: "/api/workers/integrations/sync",
+      expectStatus: 200,
+      headers: { authorization: `Bearer ${workerToken}`, "content-type": "application/json" },
+      body: JSON.stringify({ providers: ["notion"], limit: 1 }),
+      validate: (json) => json?.ok === true && Array.isArray(json?.data?.results),
     },
   );
 }
