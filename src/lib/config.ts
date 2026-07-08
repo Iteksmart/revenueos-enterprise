@@ -28,6 +28,13 @@ const serverEnvSchema = z.object({
   ),
   REVENUEOS_WORKER_TOKEN: trimmedString,
   CRON_SECRET: trimmedString,
+  HUBSPOT_PRIVATE_APP_TOKEN: trimmedString,
+  APOLLO_API_KEY: trimmedString,
+  NOTION_API_KEY: trimmedString,
+  NOTION_TOKEN: trimmedString,
+  GHL_API_KEY: trimmedString,
+  GHL_LOCATION_ID: trimmedString,
+  GHL_API_VERSION: trimmedString,
 });
 
 export const serverEnv = serverEnvSchema.parse(process.env);

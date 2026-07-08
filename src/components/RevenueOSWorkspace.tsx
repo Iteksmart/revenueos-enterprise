@@ -247,6 +247,7 @@ type IntegrationConnection = {
   health_status: string;
   last_checked_at: string | null;
   last_error: string | null;
+  config: Record<string, unknown>;
   event_count: number;
   updated_at: string;
 };
@@ -264,6 +265,15 @@ type IntegrationEvent = {
 type IntegrationData = {
   connections: IntegrationConnection[];
   events: IntegrationEvent[];
+};
+
+type IntegrationSyncResult = {
+  provider: string;
+  sourceCount: number;
+  importedContacts: number;
+  importedCompanies: number;
+  skipped: number;
+  errors: string[];
 };
 
 type SecurityUser = {
@@ -849,6 +859,29 @@ function WorkspaceShell() {
       await Promise.all([loadIntegrations(), loadAuditEvents()]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Integration update failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function syncIntegration(connection: IntegrationConnection) {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const result = await apiPost<IntegrationSyncResult>("/api/integrations/sync", {
+        provider: connection.provider,
+        limit: 50,
+      });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Integration sync failed.");
+      }
+      const data = result.data;
+      setStatus(
+        `${connection.provider} synced ${data?.importedContacts ?? 0} contacts and ${data?.importedCompanies ?? 0} companies.`,
+      );
+      await Promise.all([loadIntegrations(), loadCompanies(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Integration sync failed.");
     } finally {
       setIsBusy(false);
     }
@@ -1478,9 +1511,19 @@ function WorkspaceShell() {
                     <td><span className="rev-score">{connection.status}</span></td>
                     <td>{connection.health_status}</td>
                     <td>{connection.scopes.slice(0, 3).join(", ")}{connection.scopes.length > 3 ? "..." : ""}</td>
-                    <td>{connection.last_checked_at ? new Date(connection.last_checked_at).toLocaleString() : "-"}</td>
+                    <td>
+                      {connection.last_checked_at ? new Date(connection.last_checked_at).toLocaleString() : "-"}
+                      {typeof connection.config?.importedContacts === "number" ? (
+                        <small className="workspace-muted"> / {connection.config.importedContacts} contacts</small>
+                      ) : null}
+                    </td>
                     <td>
                       <div className="workspace-table-actions">
+                        {["hubspot", "apollo", "notion", "gohighlevel"].includes(connection.provider) ? (
+                          <button type="button" onClick={() => void syncIntegration(connection)} disabled={isBusy}>
+                            Sync
+                          </button>
+                        ) : null}
                         <button type="button" onClick={() => void markIntegration(connection, "configured")} disabled={isBusy}>
                           Configured
                         </button>

@@ -1214,6 +1214,13 @@ select {
   padding: 0 8px;
 }
 
+.workspace-muted {
+  color: rgba(232, 239, 239, 0.58);
+  display: inline-block;
+  font-size: 0.76rem;
+  margin-left: 4px;
+}
+
 .workspace-ai-actions {
   display: flex;
   flex-wrap: wrap;
