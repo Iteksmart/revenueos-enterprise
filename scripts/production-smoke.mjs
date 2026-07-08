@@ -71,6 +71,14 @@ if (workerToken) {
       body: JSON.stringify({ recipient: "noreply@itechsmart.dev", dryRun: true }),
       validate: (json) => json?.ok === true && json?.data?.dryRun === true && json?.data?.wouldSend === true,
     },
+    {
+      name: "e2e readiness",
+      method: "GET",
+      path: "/api/workers/e2e-readiness",
+      expectStatus: 200,
+      headers: { authorization: `Bearer ${workerToken}` },
+      validate: (json) => json?.ok === true && json?.data?.ready === true,
+    },
   );
 }
 

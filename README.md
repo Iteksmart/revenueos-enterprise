@@ -47,6 +47,7 @@ Copy `.env.example` into the deployment environment and configure real service v
 - `AUTH_JWKS_URL`, `AUTH_ISSUER`, and `AUTH_AUDIENCE` for OIDC/JWT verification.
 - `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` for AI meeting prep and proposal generation.
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and `OUTBOUND_SEND_ENABLED` for guarded email delivery.
+- `REVENUEOS_WORKER_TOKEN` for protected worker routes, provider health checks, production smoke, and E2E readiness checks.
 
 Apply migrations in numeric order before enabling the API.
 

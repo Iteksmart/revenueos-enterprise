@@ -23,6 +23,7 @@ Last updated: 2026-07-08.
 - Database-backed automation rules and execution runs that can create CRM tasks and queue follow-up outbox messages.
 - Integration control plane with tenant-scoped provider connection records, required scopes, readiness status, health status, and audit events.
 - Admin/security surface for tenant users, role catalog, permissions, and MFA enrollment tracking.
+- Worker-token E2E readiness route that validates production module tables and live query access.
 
 ## Not complete until production services are configured
 
