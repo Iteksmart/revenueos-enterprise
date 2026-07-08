@@ -6,7 +6,8 @@ export type OutboxWorkerMode = "dry-run" | "send";
 type ProcessOutboxInput = {
   limit: number;
   mode: OutboxWorkerMode;
-  trigger: "manual" | "cron";
+  trigger: "manual" | "cron" | "app";
+  organizationId?: string;
 };
 
 export async function processOutbox(input: ProcessOutboxInput) {
@@ -25,6 +26,7 @@ export async function processOutbox(input: ProcessOutboxInput) {
         from notification_outbox
         where status = 'queued'
           and scheduled_at <= now()
+          and (${input.organizationId ?? null} is null or organization_id = ${input.organizationId ?? null})
         order by scheduled_at asc, created_at asc
         limit ${input.limit}
         for update skip locked
@@ -64,7 +66,7 @@ export async function processOutbox(input: ProcessOutboxInput) {
   });
 
   await writeAuditEvent({
-    action: input.trigger === "cron" ? "workers.outbox.cron" : "workers.outbox.process",
+    action: input.trigger === "cron" ? "workers.outbox.cron" : input.trigger === "app" ? "workers.outbox.app_dry_run" : "workers.outbox.process",
     resourceType: "notification_outbox",
     purpose: "campaign-execution",
     outcome: "success",

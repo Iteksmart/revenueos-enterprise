@@ -119,6 +119,37 @@ type CampaignExecution = {
   }>;
 };
 
+type OutboxItem = {
+  id: string;
+  campaign_id: string | null;
+  campaign_name: string | null;
+  step_id: string | null;
+  step_order: number | null;
+  action_type: string | null;
+  channel: string;
+  recipient: string;
+  subject: string;
+  status: string;
+  scheduled_at: string;
+  sent_at: string | null;
+  error: string | null;
+  created_at: string;
+};
+
+type OutboxProcessResult = {
+  claimed: number;
+  processed: Array<{
+    id: string;
+    channel: string;
+    recipient: string;
+    subject: string;
+    status: string;
+    scheduled_at: string;
+    sent_at: string | null;
+    error: string | null;
+  }>;
+};
+
 const companySeeds = [
   {
     name: "ABC Medical",
@@ -203,6 +234,7 @@ function WorkspaceShell() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [leadScores, setLeadScores] = useState<LeadScore[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [outboxItems, setOutboxItems] = useState<OutboxItem[]>([]);
   const [aiOutput, setAiOutput] = useState("AI outputs will appear here after you run meeting prep or proposal generation.");
   const [status, setStatus] = useState("Checking RevenueOS membership...");
   const [error, setError] = useState<string | null>(null);
@@ -225,6 +257,8 @@ function WorkspaceShell() {
     [deals],
   );
   const openTaskCount = tasks.filter((task) => task.status !== "done").length;
+  const queuedOutboxCount = outboxItems.filter((item) => item.status === "queued").length;
+  const sentOutboxCount = outboxItems.filter((item) => item.status === "sent").length;
 
   useEffect(() => {
     void refreshMembership();
@@ -500,9 +534,26 @@ function WorkspaceShell() {
         throw new Error(result.error ?? "Campaign execution failed.");
       }
       setStatus(`Campaign queued: ${result.data?.steps.length ?? 0} steps and ${result.data?.outbox.length ?? 0} outbox items.`);
-      await Promise.all([loadCampaigns(), loadAuditEvents()]);
+      await Promise.all([loadCampaigns(), loadOutbox(), loadAuditEvents()]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Campaign execution failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function processOutboxDryRun() {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const result = await apiPost<OutboxProcessResult>("/api/campaigns/outbox", { limit: 10 });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Outbox dry-run failed.");
+      }
+      setStatus(`Outbox dry-run processed ${result.data?.processed.length ?? 0} items.`);
+      await Promise.all([loadCampaigns(), loadOutbox(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Outbox dry-run failed.");
     } finally {
       setIsBusy(false);
     }
@@ -552,8 +603,15 @@ function WorkspaceShell() {
     }
   }
 
+  async function loadOutbox() {
+    const result = await apiGet<OutboxItem[]>("/api/campaigns/outbox");
+    if (result.ok) {
+      setOutboxItems(result.data ?? []);
+    }
+  }
+
   async function loadWorkspaceData() {
-    await Promise.all([loadCompanies(), loadCampaigns(), loadDeals(), loadTasks(), loadLeadScores(), loadAuditEvents()]);
+    await Promise.all([loadCompanies(), loadCampaigns(), loadDeals(), loadTasks(), loadLeadScores(), loadOutbox(), loadAuditEvents()]);
   }
 
   return (
@@ -577,6 +635,7 @@ function WorkspaceShell() {
         <Metric label="Companies" value={companies.length.toString()} detail="Database-backed CRM" />
         <Metric label="Weighted Pipeline" value={formatCurrency(weightedPipeline)} detail={`${formatCurrency(totalPipeline)} account revenue signal`} />
         <Metric label="Open Tasks" value={openTaskCount.toString()} detail={`${campaigns.length} campaigns / ${leadScores.length} scores`} />
+        <Metric label="Outbox" value={queuedOutboxCount.toString()} detail={`${sentOutboxCount} dry-run sent`} />
       </section>
 
       <section className="workspace-grid">
@@ -635,7 +694,53 @@ function WorkspaceShell() {
               <button type="button" onClick={() => void executeCampaign()} disabled={isBusy || !ownerReady || campaigns.length === 0}>
                 Queue Campaign
               </button>
+              <button type="button" onClick={() => void processOutboxDryRun()} disabled={isBusy || !ownerReady || queuedOutboxCount === 0}>
+                Process Dry Run
+              </button>
             </div>
+          </div>
+        </article>
+
+        <article className="workspace-panel workspace-wide">
+          <div className="rev-panel-head">
+            <div>
+              <p className="rev-kicker">Notification Outbox</p>
+              <h2>Queued and Dry-Run Delivery</h2>
+            </div>
+            <span className="rev-pill">{queuedOutboxCount} queued</span>
+          </div>
+          <div className="rev-table-wrap">
+            <table className="rev-table">
+              <thead>
+                <tr>
+                  <th>Campaign</th>
+                  <th>Step</th>
+                  <th>Channel</th>
+                  <th>Recipient</th>
+                  <th>Subject</th>
+                  <th>Status</th>
+                  <th>Scheduled</th>
+                </tr>
+              </thead>
+              <tbody>
+                {outboxItems.slice(0, 12).map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.campaign_name ?? "-"}</td>
+                    <td>{item.step_order ?? "-"} {item.action_type ?? ""}</td>
+                    <td>{item.channel}</td>
+                    <td>{item.recipient}</td>
+                    <td>{item.subject}</td>
+                    <td><span className="rev-score">{item.status}</span></td>
+                    <td>{new Date(item.scheduled_at).toLocaleString()}</td>
+                  </tr>
+                ))}
+                {outboxItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={7}>No outbox items yet.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
         </article>
 

@@ -1224,6 +1224,7 @@ select {
 }
 
 .workspace-execution-panel button {
+  margin: 0 8px 8px 0;
   min-height: 40px;
   border: 1px solid rgba(245, 184, 75, 0.72);
   border-radius: 8px;
