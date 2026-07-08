@@ -35,6 +35,7 @@ Open `http://localhost:3000`.
 ```bash
 npm run typecheck
 npm run build
+npm run smoke:prod
 ```
 
 ## Production services

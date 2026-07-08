@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "smoke:prod": "node scripts/production-smoke.mjs",
     "visual:check": "node scripts/visual-check.mjs"
   },
   "dependencies": {
