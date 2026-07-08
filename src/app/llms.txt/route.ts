@@ -21,7 +21,7 @@ export function GET() {
     "- MCP root: https://mcp.itechsmart.dev",
     "- MCP SSE: https://mcp.itechsmart.dev/sse",
     "- ProofLink verifier: https://verify.itechsmart.dev",
-    "- RevenueOS preview: https://revenueos-enterprise.vercel.app",
+    "- RevenueOS Enterprise: https://revenueos.itechsmart.dev",
     "- GitHub MCP Server: https://github.com/Iteksmart/mcp-server",
     "- GitHub ProofLink SDK: https://github.com/Iteksmart/prooflink-sdk",
     "- GitHub ProofLink Verifier: https://github.com/Iteksmart/prooflink-verifier",

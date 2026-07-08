@@ -10,7 +10,7 @@ export type SitePage = {
   faqs: { question: string; answer: string }[];
 };
 
-const baseUrl = "https://revenueos-enterprise.vercel.app";
+const baseUrl = "https://revenueos.itechsmart.dev";
 
 export const sitePages: SitePage[] = [
   {
