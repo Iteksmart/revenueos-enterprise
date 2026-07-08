@@ -1,8 +1,7 @@
 import { z } from "zod";
-import { AuthError } from "@/lib/auth";
-import { serverEnv } from "@/lib/config";
 import { processOutbox } from "@/lib/outbox-worker";
 import { jsonError, jsonOk } from "@/lib/responses";
+import { requireWorkerToken } from "@/lib/worker-auth";
 
 const workerRequestSchema = z.object({
   limit: z.number().int().min(1).max(50).default(10),
@@ -17,19 +16,6 @@ export async function POST(request: Request) {
     return jsonOk(result);
   } catch (error) {
     return jsonError(error);
-  }
-}
-
-function requireWorkerToken(request: Request) {
-  const configured = serverEnv.REVENUEOS_WORKER_TOKEN;
-  if (!configured) {
-    throw new AuthError("REVENUEOS_WORKER_TOKEN is required for worker execution", 503);
-  }
-
-  const header = request.headers.get("authorization");
-  const token = header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : undefined;
-  if (!token || token !== configured) {
-    throw new AuthError("Worker bearer token is required", 401);
   }
 }
 
