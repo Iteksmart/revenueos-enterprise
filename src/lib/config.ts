@@ -1,23 +1,33 @@
 import { z } from "zod";
 
+const trimmedString = z.preprocess(
+  (value) => typeof value === "string" ? value.trim() : value,
+  z.string().optional(),
+);
+
+const trimmedUrl = z.preprocess(
+  (value) => typeof value === "string" ? value.trim() : value,
+  z.string().url().optional(),
+);
+
 const serverEnvSchema = z.object({
-  DATABASE_URL: z.string().url().optional(),
-  AUTH_JWKS_URL: z.string().url().optional(),
-  AUTH_ISSUER: z.string().optional(),
-  AUTH_AUDIENCE: z.string().optional(),
-  CLERK_SECRET_KEY: z.string().optional(),
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
-  OPENAI_API_KEY: z.string().optional(),
-  OPENAI_BASE_URL: z.string().url().optional(),
-  OPENAI_MODEL: z.string().optional(),
-  RESEND_API_KEY: z.string().optional(),
-  RESEND_FROM_EMAIL: z.string().optional(),
+  DATABASE_URL: trimmedUrl,
+  AUTH_JWKS_URL: trimmedUrl,
+  AUTH_ISSUER: trimmedString,
+  AUTH_AUDIENCE: trimmedString,
+  CLERK_SECRET_KEY: trimmedString,
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: trimmedString,
+  OPENAI_API_KEY: trimmedString,
+  OPENAI_BASE_URL: trimmedUrl,
+  OPENAI_MODEL: trimmedString,
+  RESEND_API_KEY: trimmedString,
+  RESEND_FROM_EMAIL: trimmedString,
   OUTBOUND_SEND_ENABLED: z.preprocess(
     (value) => typeof value === "string" ? value.trim().toLowerCase() : value,
     z.enum(["true", "false"]).optional(),
   ),
-  REVENUEOS_WORKER_TOKEN: z.string().optional(),
-  CRON_SECRET: z.string().optional(),
+  REVENUEOS_WORKER_TOKEN: trimmedString,
+  CRON_SECRET: trimmedString,
 });
 
 export const serverEnv = serverEnvSchema.parse(process.env);
