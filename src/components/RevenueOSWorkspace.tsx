@@ -44,6 +44,55 @@ type Campaign = {
   created_at: string;
 };
 
+type Deal = {
+  id: string;
+  company_id: string;
+  company_name?: string;
+  name: string;
+  stage: string;
+  amount: string;
+  probability: number;
+  close_date: string | null;
+  source: string | null;
+  created_at: string;
+};
+
+type Task = {
+  id: string;
+  company_id: string | null;
+  deal_id: string | null;
+  title: string;
+  status: string;
+  priority: string;
+  due_at: string | null;
+  created_at: string;
+};
+
+type LeadScore = {
+  id: string;
+  company_id: string;
+  company_name: string;
+  fit_score: number;
+  intent_score: number;
+  behavior_score: number;
+  budget_score: number;
+  authority_score: number;
+  urgency_score: number;
+  overall_score: number;
+  explanation: string;
+  created_at: string;
+};
+
+type AuditEvent = {
+  id: string;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  purpose: string;
+  outcome: string;
+  created_at: string;
+};
+
 const companySeeds = [
   {
     name: "ABC Medical",
@@ -72,6 +121,18 @@ const companySeeds = [
     lifecycleStage: "security-review",
     healthScore: 83,
   },
+];
+
+const dealSeeds = [
+  { company: "ABC Medical", name: "Managed IT Accountability Layer", stage: "meeting", amount: 42000, probability: 72, source: "healthcare-campaign" },
+  { company: "Smith Law", name: "ProofLink Compliance Proposal", stage: "proposal", amount: 28000, probability: 68, source: "legal-referral" },
+  { company: "City of Savannah", name: "Municipal Security Operations Review", stage: "security-review", amount: 64000, probability: 54, source: "government" },
+];
+
+const taskSeeds = [
+  { company: "ABC Medical", title: "Call ABC Medical before noon", priority: "urgent" },
+  { company: "Smith Law", title: "Send ProofLink proposal packet", priority: "high" },
+  { company: "City of Savannah", title: "Prepare security questionnaire response", priority: "high" },
 ];
 
 export function RevenueOSWorkspace() {
@@ -112,6 +173,10 @@ function WorkspaceShell() {
   const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [leadScores, setLeadScores] = useState<LeadScore[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [status, setStatus] = useState("Checking RevenueOS membership...");
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -128,6 +193,11 @@ function WorkspaceShell() {
   const organizationId = bootstrap?.organizationId ?? bootstrap?.organization_id;
   const ownerReady = Boolean(organizationId);
   const totalPipeline = useMemo(() => companies.reduce((sum, company) => sum + Number(company.annual_revenue ?? 0), 0), [companies]);
+  const weightedPipeline = useMemo(
+    () => deals.reduce((sum, deal) => sum + (Number(deal.amount ?? 0) * deal.probability) / 100, 0),
+    [deals],
+  );
+  const openTaskCount = tasks.filter((task) => task.status !== "done").length;
 
   useEffect(() => {
     void refreshMembership();
@@ -144,7 +214,7 @@ function WorkspaceShell() {
     setBootstrap(result.data ?? null);
     if (result.data) {
       setStatus("RevenueOS Owner workspace is active.");
-      await Promise.all([loadCompanies(), loadCampaigns()]);
+      await loadWorkspaceData();
     } else {
       setStatus("No RevenueOS organization is linked to this Clerk user yet.");
     }
@@ -163,7 +233,7 @@ function WorkspaceShell() {
       }
       setBootstrap(result.data ?? null);
       setStatus(result.data?.created ? "RevenueOS organization and Owner role created." : "Existing RevenueOS Owner workspace loaded.");
-      await Promise.all([loadCompanies(), loadCampaigns()]);
+      await loadWorkspaceData();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Bootstrap failed.");
     } finally {
@@ -175,12 +245,70 @@ function WorkspaceShell() {
     setIsBusy(true);
     setError(null);
     try {
+      const createdCompanies: Company[] = [];
       for (const company of companySeeds) {
         const result = await apiPost<Company>("/api/crm/companies", company);
         if (!result.ok) {
           throw new Error(result.error ?? `Could not create ${company.name}.`);
         }
+        if (result.data) {
+          createdCompanies.push(result.data);
+        }
       }
+
+      const companiesByName = new Map(createdCompanies.map((company) => [company.name, company]));
+      for (const deal of dealSeeds) {
+        const company = companiesByName.get(deal.company);
+        if (!company) {
+          continue;
+        }
+        const result = await apiPost<Deal>("/api/crm/deals", {
+          companyId: company.id,
+          name: deal.name,
+          stage: deal.stage,
+          amount: deal.amount,
+          probability: deal.probability,
+          closeDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString().slice(0, 10),
+          source: deal.source,
+        });
+        if (!result.ok) {
+          throw new Error(result.error ?? `Could not create deal for ${deal.company}.`);
+        }
+      }
+
+      for (const task of taskSeeds) {
+        const company = companiesByName.get(task.company);
+        const result = await apiPost<Task>("/api/crm/tasks", {
+          companyId: company?.id ?? null,
+          title: task.title,
+          status: "open",
+          priority: task.priority,
+          dueAt: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+        });
+        if (!result.ok) {
+          throw new Error(result.error ?? `Could not create task for ${task.company}.`);
+        }
+      }
+
+      for (const [index, company] of createdCompanies.entries()) {
+        const result = await apiPost<LeadScore>("/api/leadscore", {
+          companyId: company.id,
+          signals: {
+            industryMatch: Math.max(72, 96 - index * 5),
+            employeeFit: Math.max(68, 92 - index * 6),
+            openedEmailCount: 3 + index,
+            clickedEmailCount: 2,
+            proposalViews: index === 1 ? 2 : 1,
+            estimatedBudget: Number(company.annual_revenue ?? 0) > 0 ? 42000 + index * 11000 : 64000,
+            authorityLevel: Math.max(74, 92 - index * 6),
+            daysUntilDecision: 14 + index * 11,
+          },
+        });
+        if (!result.ok) {
+          throw new Error(result.error ?? `Could not score ${company.name}.`);
+        }
+      }
+
       const campaign = await apiPost<Campaign>("/api/campaigns", {
         name: "Healthcare Accountability Campaign",
         segment: "Healthcare organizations without an MSP accountability layer",
@@ -191,8 +319,8 @@ function WorkspaceShell() {
       if (!campaign.ok) {
         throw new Error(campaign.error ?? "Could not create campaign.");
       }
-      setStatus("CRM proof data created with audit events.");
-      await Promise.all([loadCompanies(), loadCampaigns()]);
+      setStatus("Pipeline, tasks, lead scores, campaign, and audit events created.");
+      await loadWorkspaceData();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Seed failed.");
     } finally {
@@ -219,7 +347,7 @@ function WorkspaceShell() {
       }
       setForm((current) => ({ ...current, name: "", domain: "" }));
       setStatus(`${result.data?.name ?? "Company"} saved to CRM.`);
-      await loadCompanies();
+      await loadWorkspaceData();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not create company.");
     } finally {
@@ -243,6 +371,38 @@ function WorkspaceShell() {
     }
   }
 
+  async function loadDeals() {
+    const result = await apiGet<Deal[]>("/api/crm/deals");
+    if (result.ok) {
+      setDeals(result.data ?? []);
+    }
+  }
+
+  async function loadTasks() {
+    const result = await apiGet<Task[]>("/api/crm/tasks");
+    if (result.ok) {
+      setTasks(result.data ?? []);
+    }
+  }
+
+  async function loadLeadScores() {
+    const result = await apiGet<LeadScore[]>("/api/leadscore");
+    if (result.ok) {
+      setLeadScores(result.data ?? []);
+    }
+  }
+
+  async function loadAuditEvents() {
+    const result = await apiGet<AuditEvent[]>("/api/audit/events");
+    if (result.ok) {
+      setAuditEvents(result.data ?? []);
+    }
+  }
+
+  async function loadWorkspaceData() {
+    await Promise.all([loadCompanies(), loadCampaigns(), loadDeals(), loadTasks(), loadLeadScores(), loadAuditEvents()]);
+  }
+
   return (
     <section className="workspace-shell">
       <header className="workspace-command">
@@ -262,8 +422,8 @@ function WorkspaceShell() {
       <section className="workspace-metrics" aria-label="Live workspace metrics">
         <Metric label="Organization" value={organizationName} detail={organizationId ? organizationId.slice(0, 8) : "Setup required"} />
         <Metric label="Companies" value={companies.length.toString()} detail="Database-backed CRM" />
-        <Metric label="Pipeline Signal" value={formatCurrency(totalPipeline)} detail="Annual revenue field" />
-        <Metric label="Campaigns" value={campaigns.length.toString()} detail="Consent policy logged" />
+        <Metric label="Weighted Pipeline" value={formatCurrency(weightedPipeline)} detail={`${formatCurrency(totalPipeline)} account revenue signal`} />
+        <Metric label="Open Tasks" value={openTaskCount.toString()} detail={`${campaigns.length} campaigns / ${leadScores.length} scores`} />
       </section>
 
       <section className="workspace-grid">
@@ -290,6 +450,7 @@ function WorkspaceShell() {
             <span className="rev-pill">Audit logged</span>
           </div>
           <p>Seed the first healthcare, legal, and government targets plus an approved nurture campaign.</p>
+          <p>This sprint path also creates deals, urgent tasks, lead scores, and audit events.</p>
           <button type="button" onClick={seedWorkspace} disabled={isBusy || !ownerReady}>
             Seed RevenueOS CRM
           </button>
@@ -372,6 +533,116 @@ function WorkspaceShell() {
                 ) : null}
               </tbody>
             </table>
+          </div>
+        </article>
+
+        <article className="workspace-panel">
+          <div className="rev-panel-head">
+            <div>
+              <p className="rev-kicker">Pipeline</p>
+              <h2>Deals</h2>
+            </div>
+            <span className="rev-pill">{deals.length} active</span>
+          </div>
+          <div className="workspace-stack">
+            {deals.map((deal) => (
+              <div className="workspace-row" key={deal.id}>
+                <div>
+                  <b>{deal.name}</b>
+                  <span>{deal.company_name ?? "Company"} / {deal.stage}</span>
+                </div>
+                <em>{formatCurrency(Number(deal.amount))} / {deal.probability}%</em>
+              </div>
+            ))}
+            {deals.length === 0 ? <p>No deals yet.</p> : null}
+          </div>
+        </article>
+
+        <article className="workspace-panel">
+          <div className="rev-panel-head">
+            <div>
+              <p className="rev-kicker">Priorities</p>
+              <h2>Tasks</h2>
+            </div>
+            <span className="rev-pill warning">{openTaskCount} open</span>
+          </div>
+          <div className="workspace-stack">
+            {tasks.slice(0, 6).map((task) => (
+              <div className="workspace-row" key={task.id}>
+                <div>
+                  <b>{task.title}</b>
+                  <span>{task.status} / {task.priority}</span>
+                </div>
+                <em>{task.due_at ? new Date(task.due_at).toLocaleDateString() : "No due date"}</em>
+              </div>
+            ))}
+            {tasks.length === 0 ? <p>No tasks yet.</p> : null}
+          </div>
+        </article>
+
+        <article className="workspace-panel workspace-wide">
+          <div className="rev-panel-head">
+            <div>
+              <p className="rev-kicker">Lead Intelligence</p>
+              <h2>Lead Scores</h2>
+            </div>
+            <span className="rev-pill success">{leadScores.length} scored</span>
+          </div>
+          <div className="rev-table-wrap">
+            <table className="rev-table">
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>Fit</th>
+                  <th>Intent</th>
+                  <th>Behavior</th>
+                  <th>Budget</th>
+                  <th>Authority</th>
+                  <th>Urgency</th>
+                  <th>Overall</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leadScores.map((score) => (
+                  <tr key={score.id}>
+                    <td>{score.company_name}</td>
+                    <td>{score.fit_score}</td>
+                    <td>{score.intent_score}</td>
+                    <td>{score.behavior_score}</td>
+                    <td>{score.budget_score}</td>
+                    <td>{score.authority_score}</td>
+                    <td>{score.urgency_score}</td>
+                    <td><span className="rev-score">{score.overall_score}</span></td>
+                  </tr>
+                ))}
+                {leadScores.length === 0 ? (
+                  <tr>
+                    <td colSpan={8}>No lead scores yet.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article className="workspace-panel workspace-wide">
+          <div className="rev-panel-head">
+            <div>
+              <p className="rev-kicker">Article 12 Accountability</p>
+              <h2>Audit Events</h2>
+            </div>
+            <span className="rev-pill">{auditEvents.length} events</span>
+          </div>
+          <div className="workspace-audit">
+            {auditEvents.slice(0, 12).map((event) => (
+              <div className="workspace-audit-row" key={event.id}>
+                <time>{new Date(event.created_at).toLocaleString()}</time>
+                <b>{event.action}</b>
+                <span>{event.resource_type}</span>
+                <em>{event.purpose} / {event.outcome}</em>
+              </div>
+            ))}
+            {auditEvents.length === 0 ? <p>No audit events yet.</p> : null}
           </div>
         </article>
       </section>

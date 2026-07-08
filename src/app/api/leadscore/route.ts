@@ -10,6 +10,44 @@ const requestSchema = z.object({
   signals: leadScoreInputSchema,
 });
 
+export async function GET(request: Request) {
+  try {
+    const auth = await requireAuth(request, "leadscore:read");
+    const organizationId = requireOrganization(auth.organizationId);
+    const rows = await sql()`
+      select
+        ls.id,
+        ls.company_id,
+        c.name as company_name,
+        ls.fit_score,
+        ls.intent_score,
+        ls.behavior_score,
+        ls.budget_score,
+        ls.authority_score,
+        ls.urgency_score,
+        ls.overall_score,
+        ls.explanation,
+        ls.created_at
+      from lead_scores ls
+      join crm_companies c on c.id = ls.company_id
+      where ls.organization_id = ${organizationId}
+      order by ls.created_at desc
+      limit 100
+    `;
+    await writeAuditEvent({
+      auth,
+      action: "leadscore.list",
+      resourceType: "lead_score",
+      purpose: "lead-prioritization",
+      outcome: "success",
+      userAgent: request.headers.get("user-agent"),
+    });
+    return jsonOk(rows);
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const auth = await requireAuth(request, "leadscore:write");
