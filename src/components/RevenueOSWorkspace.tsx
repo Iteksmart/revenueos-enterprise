@@ -42,6 +42,9 @@ type Campaign = {
   cadence_days: number;
   consent_policy: string;
   created_at: string;
+  step_count?: number;
+  outbox_count?: number;
+  queued_count?: number;
 };
 
 type Deal = {
@@ -91,6 +94,29 @@ type AuditEvent = {
   purpose: string;
   outcome: string;
   created_at: string;
+};
+
+type CampaignExecution = {
+  campaignId: string;
+  status: string;
+  steps: Array<{
+    id: string;
+    step_order: number;
+    trigger_type: string;
+    action_type: string;
+    channel: string;
+    delay_days: number;
+    status: string;
+    scheduled_at: string;
+  }>;
+  outbox: Array<{
+    id: string;
+    channel: string;
+    recipient: string;
+    subject: string;
+    status: string;
+    scheduled_at: string;
+  }>;
 };
 
 const companySeeds = [
@@ -457,6 +483,31 @@ function WorkspaceShell() {
     }
   }
 
+  async function executeCampaign() {
+    const campaign = campaigns[0];
+    if (!campaign) {
+      setError("Create or seed a campaign before execution.");
+      return;
+    }
+    setIsBusy(true);
+    setError(null);
+    try {
+      const result = await apiPost<CampaignExecution>("/api/campaigns/execute", {
+        campaignId: campaign.id,
+        recipients: [user?.primaryEmailAddress?.emailAddress ?? "kevin@itechsmart.dev"],
+      });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Campaign execution failed.");
+      }
+      setStatus(`Campaign queued: ${result.data?.steps.length ?? 0} steps and ${result.data?.outbox.length ?? 0} outbox items.`);
+      await Promise.all([loadCampaigns(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Campaign execution failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   async function loadCompanies() {
     const result = await apiGet<Company[]>("/api/crm/companies");
     if (result.ok) {
@@ -556,6 +607,36 @@ function WorkspaceShell() {
           <button type="button" onClick={seedWorkspace} disabled={isBusy || !ownerReady}>
             Seed RevenueOS CRM
           </button>
+        </article>
+
+        <article className="workspace-panel workspace-wide">
+          <div className="rev-panel-head">
+            <div>
+              <p className="rev-kicker">Campaign Execution</p>
+              <h2>Queued Nurture Engine</h2>
+            </div>
+            <span className="rev-pill warning">{campaigns.reduce((sum, campaign) => sum + (campaign.queued_count ?? 0), 0)} queued</span>
+          </div>
+          <div className="workspace-campaign-grid">
+            <div className="workspace-stack">
+              {campaigns.map((campaign) => (
+                <div className="workspace-row" key={campaign.id}>
+                  <div>
+                    <b>{campaign.name}</b>
+                    <span>{campaign.segment}</span>
+                  </div>
+                  <em>{campaign.status} / {campaign.step_count ?? 0} steps / {campaign.outbox_count ?? 0} outbox</em>
+                </div>
+              ))}
+              {campaigns.length === 0 ? <p>No campaigns yet.</p> : null}
+            </div>
+            <div className="workspace-execution-panel">
+              <p>Queue the default RevenueOS nurture sequence: value email, follow-up, and sales task trigger. Each item is auditable before any external provider sends it.</p>
+              <button type="button" onClick={() => void executeCampaign()} disabled={isBusy || !ownerReady || campaigns.length === 0}>
+                Queue Campaign
+              </button>
+            </div>
+          </div>
         </article>
 
         <article className="workspace-panel workspace-wide">

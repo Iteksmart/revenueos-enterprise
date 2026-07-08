@@ -1204,6 +1204,41 @@ select {
   white-space: pre-wrap;
 }
 
+.workspace-campaign-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.75fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.workspace-execution-panel {
+  min-height: 100%;
+  border: 1px solid rgba(245, 184, 75, 0.34);
+  border-radius: 8px;
+  background: rgba(245, 184, 75, 0.08);
+  padding: 14px;
+}
+
+.workspace-execution-panel p {
+  margin: 0 0 14px;
+}
+
+.workspace-execution-panel button {
+  min-height: 40px;
+  border: 1px solid rgba(245, 184, 75, 0.72);
+  border-radius: 8px;
+  background: var(--amber);
+  color: #160f03;
+  cursor: pointer;
+  font-weight: 900;
+  padding: 0 14px;
+}
+
+.workspace-execution-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .workspace-audit {
   display: grid;
   gap: 6px;
@@ -1246,6 +1281,10 @@ select {
 
   .workspace-audit-row {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .workspace-campaign-grid {
+    grid-template-columns: 1fr;
   }
 }
 
