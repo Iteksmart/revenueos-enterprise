@@ -37,12 +37,15 @@ type Company = {
 type Contact = {
   id: string;
   company_id: string | null;
+  company_name: string | null;
   first_name: string;
   last_name: string;
   email: string | null;
   phone: string | null;
   title: string | null;
   authority_level: number;
+  source_providers: string[];
+  last_source_seen_at: string | null;
   updated_at: string;
 };
 
@@ -286,6 +289,10 @@ type IntegrationSyncResult = {
   importedCompanies: number;
   skipped: number;
   errors: string[];
+};
+
+type ImportedLeadScoreResult = {
+  scoredCount: number;
 };
 
 type SecurityUser = {
@@ -901,6 +908,23 @@ function WorkspaceShell() {
     }
   }
 
+  async function scoreImportedCompanies() {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const result = await apiPost<ImportedLeadScoreResult>("/api/leadscore/imported", {});
+      if (!result.ok) {
+        throw new Error(result.error ?? "Imported lead scoring failed.");
+      }
+      setStatus(`Lead scores generated for ${result.data?.scoredCount ?? 0} imported companies.`);
+      await Promise.all([loadLeadScores(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Imported lead scoring failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   async function seedSecurityRoles() {
     setIsBusy(true);
     setError(null);
@@ -1340,6 +1364,8 @@ function WorkspaceShell() {
               <thead>
                 <tr>
                   <th>Name</th>
+                  <th>Company</th>
+                  <th>Source</th>
                   <th>Email</th>
                   <th>Phone</th>
                   <th>Title</th>
@@ -1351,16 +1377,18 @@ function WorkspaceShell() {
                 {contacts.slice(0, 50).map((contact) => (
                   <tr key={contact.id}>
                     <td>{contact.first_name} {contact.last_name}</td>
+                    <td>{contact.company_name ?? "-"}</td>
+                    <td>{contact.source_providers?.join(", ") || "-"}</td>
                     <td>{contact.email ?? "-"}</td>
                     <td>{contact.phone ?? "-"}</td>
                     <td>{contact.title ?? "-"}</td>
                     <td><span className="rev-score">{contact.authority_level}</span></td>
-                    <td>{new Date(contact.updated_at).toLocaleDateString()}</td>
+                    <td>{new Date(contact.last_source_seen_at ?? contact.updated_at).toLocaleDateString()}</td>
                   </tr>
                 ))}
                 {contacts.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>No contacts imported yet. Run Sync from Apollo or GoHighLevel.</td>
+                    <td colSpan={8}>No contacts imported yet. Run Sync from Apollo or GoHighLevel.</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -1690,6 +1718,12 @@ function WorkspaceShell() {
               <h2>Lead Scores</h2>
             </div>
             <span className="rev-pill success">{leadScores.length} scored</span>
+          </div>
+          <div className="workspace-execution-panel workspace-cs-action">
+            <p>Turn imported source records into fit, authority, budget, and urgency scores for prioritization.</p>
+            <button type="button" onClick={() => void scoreImportedCompanies()} disabled={isBusy || !ownerReady || companies.length === 0}>
+              Score Imported Companies
+            </button>
           </div>
           <div className="rev-table-wrap">
             <table className="rev-table">

@@ -19,10 +19,26 @@ export async function GET(request: Request) {
     const auth = await requireAuth(request, "crm:read");
     const organizationId = requireOrganization(auth.organizationId);
     const rows = await sql()`
-      select id, company_id, first_name, last_name, email, phone, title, authority_level, created_at, updated_at
-      from crm_contacts
-      where organization_id = ${organizationId}
-      order by updated_at desc
+      select
+        ct.id,
+        ct.company_id,
+        c.name as company_name,
+        ct.first_name,
+        ct.last_name,
+        ct.email,
+        ct.phone,
+        ct.title,
+        ct.authority_level,
+        coalesce(array_agg(distinct er.provider) filter (where er.provider is not null), '{}') as source_providers,
+        max(er.last_seen_at) as last_source_seen_at,
+        ct.created_at,
+        ct.updated_at
+      from crm_contacts ct
+      left join crm_companies c on c.id = ct.company_id
+      left join integration_external_records er on er.crm_contact_id = ct.id and er.record_type = 'contact'
+      where ct.organization_id = ${organizationId}
+      group by ct.id, c.name
+      order by ct.updated_at desc
       limit 100
     `;
     await writeAuditEvent({ auth, action: "crm.contacts.list", resourceType: "crm_contact", purpose: "relationship-management", outcome: "success" });

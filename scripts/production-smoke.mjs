@@ -41,6 +41,14 @@ const checks = [
     expectStatus: 401,
   },
   {
+    name: "imported leadscore fails closed",
+    method: "POST",
+    path: "/api/leadscore/imported",
+    expectStatus: 401,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({}),
+  },
+  {
     name: "integration cron fails closed",
     method: "GET",
     path: "/api/cron/integrations/sync",
