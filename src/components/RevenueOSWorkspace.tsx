@@ -266,6 +266,34 @@ type IntegrationData = {
   events: IntegrationEvent[];
 };
 
+type SecurityUser = {
+  id: string;
+  external_subject: string;
+  email: string;
+  display_name: string;
+  mfa_enrolled: boolean;
+  created_at: string;
+  roles: string[];
+  permissions: string[];
+};
+
+type SecurityRole = {
+  id: string;
+  name: string;
+  permissions: string[];
+  created_at: string;
+};
+
+type SecurityData = {
+  summary: {
+    user_count: number;
+    mfa_enrolled_count: number;
+  };
+  users: SecurityUser[];
+  roles: SecurityRole[];
+  roleCatalog: Array<{ name: string; permissions: string[] }>;
+};
+
 const companySeeds = [
   {
     name: "ABC Medical",
@@ -355,6 +383,7 @@ function WorkspaceShell() {
   const [proposals, setProposals] = useState<ProposalArtifact[]>([]);
   const [automations, setAutomations] = useState<AutomationData | null>(null);
   const [integrations, setIntegrations] = useState<IntegrationData | null>(null);
+  const [security, setSecurity] = useState<SecurityData | null>(null);
   const [aiOutput, setAiOutput] = useState("AI outputs will appear here after you run meeting prep or proposal generation.");
   const [status, setStatus] = useState("Checking RevenueOS membership...");
   const [error, setError] = useState<string | null>(null);
@@ -389,6 +418,9 @@ function WorkspaceShell() {
   const integrationConnections = integrations?.connections ?? [];
   const integrationEvents = integrations?.events ?? [];
   const readyIntegrationCount = integrationConnections.filter((connection) => connection.status === "connected" && connection.health_status === "healthy").length;
+  const securityUsers = security?.users ?? [];
+  const securityRoles = security?.roles ?? [];
+  const mfaCoverage = security?.summary.user_count ? Math.round(((security.summary.mfa_enrolled_count ?? 0) / security.summary.user_count) * 100) : 0;
 
   useEffect(() => {
     void refreshMembership();
@@ -522,7 +554,11 @@ function WorkspaceShell() {
       if (!integrationSeed.ok) {
         throw new Error(integrationSeed.error ?? "Could not seed integrations.");
       }
-      setStatus("Pipeline, tasks, lead scores, campaign, customer success accounts, automations, integrations, and audit events created.");
+      const securitySeed = await apiPost<{ roleCount: number }>("/api/admin/security", { seed: true });
+      if (!securitySeed.ok) {
+        throw new Error(securitySeed.error ?? "Could not seed security roles.");
+      }
+      setStatus("Pipeline, tasks, lead scores, campaign, customer success accounts, automations, integrations, security roles, and audit events created.");
       await loadWorkspaceData();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Seed failed.");
@@ -818,6 +854,43 @@ function WorkspaceShell() {
     }
   }
 
+  async function seedSecurityRoles() {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const result = await apiPost<{ roleCount: number }>("/api/admin/security", { seed: true });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Security role seed failed.");
+      }
+      setStatus(`Security role catalog seeded with ${result.data?.roleCount ?? 0} roles.`);
+      await Promise.all([loadSecurity(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Security role seed failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function updateSecurityUser(userRecord: SecurityUser, payload: { mfaEnrolled?: boolean; roleName?: string }) {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const result = await apiPost<SecurityUser>("/api/admin/security", {
+        userId: userRecord.id,
+        ...payload,
+      });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Security update failed.");
+      }
+      setStatus(`${userRecord.email} security profile updated.`);
+      await Promise.all([loadSecurity(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Security update failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   async function loadCompanies() {
     const result = await apiGet<Company[]>("/api/crm/companies");
     if (result.ok) {
@@ -897,6 +970,13 @@ function WorkspaceShell() {
     }
   }
 
+  async function loadSecurity() {
+    const result = await apiGet<SecurityData>("/api/admin/security");
+    if (result.ok) {
+      setSecurity(result.data ?? null);
+    }
+  }
+
   async function loadWorkspaceData() {
     await Promise.all([
       loadCompanies(),
@@ -909,6 +989,7 @@ function WorkspaceShell() {
       loadProposals(),
       loadAutomations(),
       loadIntegrations(),
+      loadSecurity(),
       loadAuditEvents(),
     ]);
   }
@@ -939,6 +1020,7 @@ function WorkspaceShell() {
         <Metric label="Proposals" value={formatCurrency(openProposalValue)} detail={`${proposals.length} stored proposal artifacts`} />
         <Metric label="Automations" value={automationRules.length.toString()} detail={`${automationRuns.length} recent execution runs`} />
         <Metric label="Integrations" value={`${readyIntegrationCount}/${integrationConnections.length}`} detail={`${integrationEvents.length} recent provider events`} />
+        <Metric label="MFA Coverage" value={`${mfaCoverage}%`} detail={`${securityRoles.length} RBAC roles / ${securityUsers.length} users`} />
       </section>
 
       <section className="workspace-grid">
@@ -1419,6 +1501,77 @@ function WorkspaceShell() {
                 ) : null}
               </tbody>
             </table>
+          </div>
+        </article>
+
+        <article className="workspace-panel workspace-wide">
+          <div className="rev-panel-head">
+            <div>
+              <p className="rev-kicker">Admin and Security</p>
+              <h2>RBAC, MFA, and Permission Ledger</h2>
+            </div>
+            <span className="rev-pill success">{securityRoles.length} roles</span>
+          </div>
+          <div className="workspace-execution-panel workspace-cs-action">
+            <p>Seed operational roles, review user permissions, and track MFA enrollment status for the RevenueOS tenant.</p>
+            <button type="button" onClick={() => void seedSecurityRoles()} disabled={isBusy || !ownerReady}>
+              Seed Roles
+            </button>
+          </div>
+          <div className="workspace-campaign-grid">
+            <div className="rev-table-wrap">
+              <table className="rev-table">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Roles</th>
+                    <th>MFA</th>
+                    <th>Permissions</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {securityUsers.map((securityUser) => (
+                    <tr key={securityUser.id}>
+                      <td>{securityUser.email}</td>
+                      <td>{securityUser.roles.join(", ") || "-"}</td>
+                      <td><span className="rev-score">{securityUser.mfa_enrolled ? "on" : "off"}</span></td>
+                      <td>{securityUser.permissions.slice(0, 5).join(", ")}{securityUser.permissions.length > 5 ? "..." : ""}</td>
+                      <td>
+                        <div className="workspace-table-actions">
+                          <button type="button" onClick={() => void updateSecurityUser(securityUser, { mfaEnrolled: !securityUser.mfa_enrolled })} disabled={isBusy}>
+                            MFA
+                          </button>
+                          <button type="button" onClick={() => void updateSecurityUser(securityUser, { roleName: "Sales" })} disabled={isBusy}>
+                            Sales
+                          </button>
+                          <button type="button" onClick={() => void updateSecurityUser(securityUser, { roleName: "Auditor" })} disabled={isBusy}>
+                            Auditor
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {securityUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={5}>No RevenueOS users yet.</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+            <div className="workspace-stack">
+              {securityRoles.map((role) => (
+                <div className="workspace-row" key={role.id}>
+                  <div>
+                    <b>{role.name}</b>
+                    <span>{role.permissions.join(", ")}</span>
+                  </div>
+                  <em>{role.permissions.length} permissions</em>
+                </div>
+              ))}
+              {securityRoles.length === 0 ? <p>No roles yet.</p> : null}
+            </div>
           </div>
         </article>
 

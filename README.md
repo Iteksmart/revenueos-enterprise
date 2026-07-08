@@ -19,7 +19,7 @@ This repo is the standalone iTechSmart RevenueOS Enterprise preview. It is built
 - Postgres schema migration for core CRM, campaign, lead scoring, RBAC-ready users/roles, and audit events.
 - Authenticated API routes for CRM companies, contacts, deals, tasks, campaigns, lead scoring, audit events, health, AI meeting prep, and proposal generation.
 - Clerk SSO integration for app sessions, plus JWKS/OIDC bearer-token fallback for machine/API clients.
-- Customer Success accounts, renewal risk, portal work items, touchpoints, proposal artifacts, quotes, automation rules/runs, and integration readiness records.
+- Customer Success accounts, renewal risk, portal work items, touchpoints, proposal artifacts, quotes, automation rules/runs, integration readiness records, and admin/security RBAC views.
 
 ## Run locally
 

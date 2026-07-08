@@ -40,6 +40,12 @@ const checks = [
     path: "/api/integrations",
     expectStatus: 401,
   },
+  {
+    name: "admin security fails closed",
+    method: "GET",
+    path: "/api/admin/security",
+    expectStatus: 401,
+  },
 ];
 
 if (workerToken) {
