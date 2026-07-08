@@ -644,7 +644,7 @@ select {
   .rev-metric,
   .rev-panel,
   .rev-signal-strip {
-    animation: rev-rise 680ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: rev-rise 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   .rev-metric:nth-child(2n) {
@@ -1364,5 +1364,35 @@ select {
 
   .workspace-row button {
     width: 100%;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   DESIGN-GOLD safe polish — 2026-07-08 (additive only; no wiring changes)
+   Focus rings on every control + an explicit reduced-motion reduce block.
+   (The rev-rise entrance is already gated behind prefers-reduced-motion:
+   no-preference; this adds a belt-and-suspenders reduce fallback.)
+   ───────────────────────────────────────────────────────────────────── */
+
+/* Visible keyboard focus on every interactive control (DESIGN-GOLD §4.6).
+   :focus-visible keeps mouse clicks ring-free; accent = teal signal color. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
