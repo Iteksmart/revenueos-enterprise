@@ -10,6 +10,7 @@ const serverEnvSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.string().url().optional(),
   OPENAI_MODEL: z.string().optional(),
+  REVENUEOS_WORKER_TOKEN: z.string().optional(),
 });
 
 export const serverEnv = serverEnvSchema.parse(process.env);
