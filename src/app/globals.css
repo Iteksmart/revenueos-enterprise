@@ -1160,6 +1160,50 @@ select {
   text-align: right;
 }
 
+.workspace-row button,
+.workspace-ai-actions button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: rgba(57, 215, 200, 0.1);
+  color: var(--teal);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 0 11px;
+  text-transform: uppercase;
+}
+
+.workspace-row button:disabled,
+.workspace-ai-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.workspace-ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.workspace-ai-output {
+  min-height: 190px;
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(7, 9, 10, 0.72);
+  color: #d7dbd7;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
 .workspace-audit {
   display: grid;
   gap: 6px;
@@ -1234,5 +1278,9 @@ select {
 
   .workspace-row em {
     text-align: left;
+  }
+
+  .workspace-row button {
+    width: 100%;
   }
 }

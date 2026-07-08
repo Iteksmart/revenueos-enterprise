@@ -177,6 +177,7 @@ function WorkspaceShell() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [leadScores, setLeadScores] = useState<LeadScore[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [aiOutput, setAiOutput] = useState("AI outputs will appear here after you run meeting prep or proposal generation.");
   const [status, setStatus] = useState("Checking RevenueOS membership...");
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -350,6 +351,107 @@ function WorkspaceShell() {
       await loadWorkspaceData();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not create company.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function advanceDeal(deal: Deal) {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const nextStage = nextDealStage(deal.stage);
+      const result = await apiPatch<Deal>("/api/crm/deals", {
+        id: deal.id,
+        stage: nextStage,
+        probability: Math.min(95, deal.probability + 12),
+      });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Could not update deal.");
+      }
+      setStatus(`${deal.name} advanced to ${nextStage}.`);
+      await Promise.all([loadDeals(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update deal.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function completeTask(task: Task) {
+    setIsBusy(true);
+    setError(null);
+    try {
+      const result = await apiPatch<Task>("/api/crm/tasks", {
+        id: task.id,
+        status: task.status === "done" ? "open" : "done",
+      });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Could not update task.");
+      }
+      setStatus(task.status === "done" ? "Task reopened." : "Task completed.");
+      await Promise.all([loadTasks(), loadAuditEvents()]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update task.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function runMeetingPrep() {
+    const company = companies[0];
+    if (!company) {
+      setError("Create or seed a company before running meeting prep.");
+      return;
+    }
+    setIsBusy(true);
+    setError(null);
+    setAiOutput("Meeting prep is running...");
+    try {
+      const result = await apiPost<{ meetingPrep: string }>("/api/ai/meeting-prep", {
+        companyId: company.id,
+        meetingGoal: "Prepare an executive meeting to position iTechSmart as the IT accountability layer standard.",
+      });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Meeting prep failed.");
+      }
+      setAiOutput(result.data?.meetingPrep ?? "No meeting prep returned.");
+      setStatus("AI meeting prep generated.");
+      await loadAuditEvents();
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Meeting prep failed.";
+      setAiOutput(message);
+      setError(message);
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function runProposalBuilder() {
+    const deal = deals[0];
+    if (!deal) {
+      setError("Create or seed a deal before running proposal generation.");
+      return;
+    }
+    setIsBusy(true);
+    setError(null);
+    setAiOutput("Proposal builder is running...");
+    try {
+      const result = await apiPost<{ proposal: string }>("/api/ai/proposal", {
+        dealId: deal.id,
+        offer: "RevenueOS, ProofLink audit receipts, managed IT accountability, executive reporting, and quarterly compliance review.",
+        terms: "12-month managed service agreement with onboarding, monthly operating review, and ProofLink-backed accountability evidence.",
+      });
+      if (!result.ok) {
+        throw new Error(result.error ?? "Proposal generation failed.");
+      }
+      setAiOutput(result.data?.proposal ?? "No proposal returned.");
+      setStatus("AI proposal generated.");
+      await loadAuditEvents();
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Proposal generation failed.";
+      setAiOutput(message);
+      setError(message);
     } finally {
       setIsBusy(false);
     }
@@ -552,6 +654,9 @@ function WorkspaceShell() {
                   <span>{deal.company_name ?? "Company"} / {deal.stage}</span>
                 </div>
                 <em>{formatCurrency(Number(deal.amount))} / {deal.probability}%</em>
+                <button type="button" onClick={() => void advanceDeal(deal)} disabled={isBusy}>
+                  Advance
+                </button>
               </div>
             ))}
             {deals.length === 0 ? <p>No deals yet.</p> : null}
@@ -574,10 +679,32 @@ function WorkspaceShell() {
                   <span>{task.status} / {task.priority}</span>
                 </div>
                 <em>{task.due_at ? new Date(task.due_at).toLocaleDateString() : "No due date"}</em>
+                <button type="button" onClick={() => void completeTask(task)} disabled={isBusy}>
+                  {task.status === "done" ? "Reopen" : "Done"}
+                </button>
               </div>
             ))}
             {tasks.length === 0 ? <p>No tasks yet.</p> : null}
           </div>
+        </article>
+
+        <article className="workspace-panel workspace-wide">
+          <div className="rev-panel-head">
+            <div>
+              <p className="rev-kicker">AI Workbench</p>
+              <h2>Meeting Prep and Proposal Builder</h2>
+            </div>
+            <span className="rev-pill success">Audit logged</span>
+          </div>
+          <div className="workspace-ai-actions">
+            <button type="button" onClick={() => void runMeetingPrep()} disabled={isBusy || !ownerReady}>
+              Prepare Meeting
+            </button>
+            <button type="button" onClick={() => void runProposalBuilder()} disabled={isBusy || !ownerReady}>
+              Generate Proposal
+            </button>
+          </div>
+          <pre className="workspace-ai-output">{aiOutput}</pre>
         </article>
 
         <article className="workspace-panel workspace-wide">
@@ -673,6 +800,25 @@ async function apiPost<T>(path: string, body: unknown): Promise<ApiResult<T>> {
     body: JSON.stringify(body),
   });
   return response.json();
+}
+
+async function apiPatch<T>(path: string, body: unknown): Promise<ApiResult<T>> {
+  const response = await fetch(path, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return response.json();
+}
+
+function nextDealStage(stage: string) {
+  const stages = ["research", "meeting", "proposal", "security-review", "negotiation", "closed-won"];
+  const current = stages.indexOf(stage);
+  if (current === -1) {
+    return "meeting";
+  }
+  return stages[Math.min(stages.length - 1, current + 1)];
 }
 
 function formatCurrency(value: number) {

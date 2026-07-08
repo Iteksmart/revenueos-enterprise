@@ -15,6 +15,14 @@ const createDealSchema = z.object({
   source: z.string().nullable().optional(),
 });
 
+const updateDealSchema = z.object({
+  id: z.string().uuid(),
+  stage: z.string().min(2).optional(),
+  amount: z.number().nonnegative().optional(),
+  probability: z.number().int().min(0).max(100).optional(),
+  closeDate: z.string().date().nullable().optional(),
+});
+
 export async function GET(request: Request) {
   try {
     const auth = await requireAuth(request, "crm:read");
@@ -50,6 +58,40 @@ export async function POST(request: Request) {
     `;
     await writeAuditEvent({ auth, action: "crm.deals.create", resourceType: "crm_deal", resourceId: rows[0]?.id, purpose: "pipeline-management", outcome: "success" });
     return jsonOk(rows[0], 201);
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const auth = await requireAuth(request, "crm:write");
+    const organizationId = requireOrganization(auth.organizationId);
+    const body = updateDealSchema.parse(await request.json());
+    const keepCloseDate = body.closeDate === undefined;
+    const rows = await sql()`
+      update crm_deals set
+        stage = coalesce(${body.stage ?? null}, stage),
+        amount = coalesce(${body.amount ?? null}, amount),
+        probability = coalesce(${body.probability ?? null}, probability),
+        close_date = case when ${keepCloseDate} then close_date else ${body.closeDate ?? null} end,
+        updated_at = now()
+      where organization_id = ${organizationId} and id = ${body.id}
+      returning id, company_id, primary_contact_id, name, stage, amount, probability, close_date, source, created_at
+    `;
+    if (!rows[0]) {
+      return jsonOk({ deal: null, reason: "Deal not found" }, 404);
+    }
+    await writeAuditEvent({
+      auth,
+      action: "crm.deals.update",
+      resourceType: "crm_deal",
+      resourceId: rows[0].id,
+      purpose: "pipeline-management",
+      outcome: "success",
+      metadata: { stage: body.stage, probability: body.probability },
+    });
+    return jsonOk(rows[0]);
   } catch (error) {
     return jsonError(error);
   }

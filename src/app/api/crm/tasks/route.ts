@@ -14,6 +14,14 @@ const createTaskSchema = z.object({
   dueAt: z.string().datetime().nullable().optional(),
 });
 
+const updateTaskSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().min(2).optional(),
+  status: z.enum(["open", "in_progress", "blocked", "done"]).optional(),
+  priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
+  dueAt: z.string().datetime().nullable().optional(),
+});
+
 export async function GET(request: Request) {
   try {
     const auth = await requireAuth(request, "crm:read");
@@ -48,6 +56,44 @@ export async function POST(request: Request) {
     `;
     await writeAuditEvent({ auth, action: "crm.tasks.create", resourceType: "crm_task", resourceId: rows[0]?.id, purpose: "task-management", outcome: "success" });
     return jsonOk(rows[0], 201);
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const auth = await requireAuth(request, "crm:write");
+    const organizationId = requireOrganization(auth.organizationId);
+    const body = updateTaskSchema.parse(await request.json());
+    const keepDueAt = body.dueAt === undefined;
+    const rows = await sql()`
+      update crm_tasks set
+        title = coalesce(${body.title ?? null}, title),
+        status = coalesce(${body.status ?? null}, status),
+        priority = coalesce(${body.priority ?? null}, priority),
+        due_at = case when ${keepDueAt} then due_at else ${body.dueAt ?? null} end,
+        completed_at = case
+          when ${body.status ?? null} = 'done' then coalesce(completed_at, now())
+          when ${body.status ?? null} is not null and ${body.status ?? null} <> 'done' then null
+          else completed_at
+        end
+      where organization_id = ${organizationId} and id = ${body.id}
+      returning id, company_id, deal_id, assigned_user_id, title, status, priority, due_at, completed_at, created_at
+    `;
+    if (!rows[0]) {
+      return jsonOk({ task: null, reason: "Task not found" }, 404);
+    }
+    await writeAuditEvent({
+      auth,
+      action: "crm.tasks.update",
+      resourceType: "crm_task",
+      resourceId: rows[0].id,
+      purpose: "task-management",
+      outcome: "success",
+      metadata: { status: body.status, priority: body.priority },
+    });
+    return jsonOk(rows[0]);
   } catch (error) {
     return jsonError(error);
   }
