@@ -23,7 +23,7 @@ jobs:
       - name: Build
         run: npm run build
       - name: Production smoke
-        if: ${{ github.event_name == 'push' && secrets.REVENUEOS_WORKER_TOKEN != '' }}
+        if: ${{ github.event_name == 'push' }}
         run: npm run smoke:prod
         env:
           REVENUEOS_BASE_URL: https://revenueos.itechsmart.dev
